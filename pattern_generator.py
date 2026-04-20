@@ -36,14 +36,12 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
                 training_values = [int(b) for b in training_value]
             elif len(training_value) == 1:
                 training_values = [int(training_value)] * num_frames
-            elif num_frames % len(training_value) == 0:
-                pattern = [int(b) for b in training_value]
-                training_values = pattern * (num_frames // len(pattern))
             else:
-                raise ValueError(
-                    "training_value string length must equal num_frames, be a single bit, "
-                    "or be a repeating pattern whose length divides num_frames"
-                )
+                # Cyclic pattern: repeat pattern until num_frames is reached
+                pattern = [int(b) for b in training_value]
+                training_values = []
+                for i in range(num_frames):
+                    training_values.append(pattern[i % len(pattern)])
         else:
             raise ValueError("training_value string must contain only '0' or '1'")
     elif isinstance(training_value, int):
