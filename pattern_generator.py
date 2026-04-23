@@ -107,6 +107,130 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
     return pattern_hex
 
 
+def generate_init_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
+    """
+    Generate PDE initialization pattern (hex string).
+    
+    Creates 16 frames per clock with R0=0, R1=1, R2=0, R3=1, other CA=1, CK toggle or fixed, rest=0.
+    
+    Args:
+        num_clocks (int): Number of clocks (each clock = 16 frames)
+        clock_toggle (bool): Toggle HBM_CK signal (starts from low)
+        clock_value (int): Fixed HBM_CK value (0 or 1) if not toggling
+    
+    Returns:
+        str: Concatenated hex string (128 chars per clock)
+    """
+    BIT_NAMES = [
+        'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
+        'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
+        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'RD_EN'
+    ]
+    
+    pattern_hex = ""
+    ck_state = 0  # Start from low
+    
+    for clock_idx in range(num_clocks):
+        for frame_idx in range(16):
+            bits = [0] * 27
+            
+            # CA signals: R0=0, R1=1, R2=0, R3=1, others=1
+            bits[0] = 0  # R0
+            bits[1] = 1  # R1
+            bits[2] = 0  # R2
+            bits[3] = 1  # R3
+            for i in range(4, 19):  # R4~R10, C0~C7
+                bits[i] = 1
+            
+            # CK
+            if clock_toggle:
+                ck_state = frame_idx % 2  # Toggle: 0,1,0,1,...
+            else:
+                ck_state = clock_value
+            bits[19] = ck_state
+            
+            # Rest are 0 (default)
+            
+            # Convert to int
+            frame_int = 0
+            for i, bit in enumerate(bits):
+                frame_int |= (bit << i)
+            
+            frame_hex = f"{frame_int:08X}"
+            pattern_hex += frame_hex
+            
+            if DEBUG_MODE:
+                bits_str = bin(frame_int)[2:].zfill(27)
+                print(f"PDE Clock {clock_idx} Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]}")
+    
+    return pattern_hex
+
+
+def generate_init_pdx_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
+    """
+    Generate PDX initialization pattern (hex string).
+    
+    Creates 16 frames per clock with all CA=1, CK toggle or fixed, rest=0.
+    
+    Args:
+        num_clocks (int): Number of clocks (each clock = 16 frames)
+        clock_toggle (bool): Toggle HBM_CK signal (starts from low)
+        clock_value (int): Fixed HBM_CK value (0 or 1) if not toggling
+    
+    Returns:
+        str: Concatenated hex string (128 chars per clock)
+    """
+    BIT_NAMES = [
+        'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
+        'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
+        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'RD_EN'
+    ]
+    
+    pattern_hex = ""
+    ck_state = 0  # Start from low
+    
+    for clock_idx in range(num_clocks):
+        for frame_idx in range(16):
+            bits = [0] * 27
+            
+            # All CA signals = 1
+            for i in range(19):
+                bits[i] = 1
+            
+            # CK
+            if clock_toggle:
+                ck_state = frame_idx % 2  # Toggle: 0,1,0,1,...
+            else:
+                ck_state = clock_value
+            bits[19] = ck_state
+            
+            # Rest are 0 (default)
+            
+            # Convert to int
+            frame_int = 0
+            for i, bit in enumerate(bits):
+                frame_int |= (bit << i)
+            
+            frame_hex = f"{frame_int:08X}"
+            pattern_hex += frame_hex
+            
+            if DEBUG_MODE:
+                bits_str = bin(frame_int)[2:].zfill(27)
+                print(f"PDX Clock {clock_idx} Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]}")
+    
+    return pattern_hex
+
+
+def generate_init_mrs_pattern():
+    """
+    Generate MRS initialization pattern (hex string).
+    
+    TBD
+    """
+    # TBD
+    pass
+
+
 def extract_aword_input_words(hex_pattern):
     """
     Convert 4-frame clock blocks into 38-bit AWORD MISR input words.
@@ -205,7 +329,7 @@ def get_aword_misr(hex_pattern, taps=[5, 4, 0], initial=0x2AAAAAAAAA, width=38):
     return f"{steps[-1][4]:0{(width + 3) // 4}X}"
 
 
-def pattern_to_serdes_16to1(hex_pattern, clock_state=0):
+def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_value=0):
     """
     Convert CA training pattern to SERDES 16:1 format.
     
@@ -214,7 +338,8 @@ def pattern_to_serdes_16to1(hex_pattern, clock_state=0):
     
     Args:
         hex_pattern (str): Hex pattern (8 chars per frame)
-        clock_state (int): Initial CK state (0 or 1)
+        padding_ck_toggle (bool): Whether to toggle HBM_CK for padding frames based on last frame's CK (default True)
+        padding_ck_value (int): Fixed HBM_CK value (0 or 1) for padding if not toggling (default 0)
     
     Returns:
         str: SERDES 16:1 hex pattern (128 chars per 16 frames)
@@ -250,11 +375,18 @@ def pattern_to_serdes_16to1(hex_pattern, clock_state=0):
         frames.append(frame_27bit)
     
     # Pad to multiple of 16 frames
-    ck_state = clock_state
+    if len(frames) > 0:
+        last_ck = (frames[-1] >> 19) & 1
+    else:
+        last_ck = 0
     while len(frames) % 16 != 0:
-        padding_frame = create_padding_frame(ck_state)
+        if padding_ck_toggle:
+            ck_val = (last_ck + 1) % 2
+        else:
+            ck_val = padding_ck_value
+        padding_frame = create_padding_frame(ck_val)
         frames.append(padding_frame)
-        ck_state = (ck_state + 1) % 2  # Toggle CK every frame for consistency
+        last_ck = ck_val
     
     # Convert to SERDES 16:1 format (16 frames -> 1 output block)
     serdes_pattern = ""
@@ -344,7 +476,7 @@ def test_ca_training():
         print(f"  Frame {i:2d}: {format(frame_int, '027b')} ({frame_hex})")
     
     # Perform SERDES conversion and collect padding frames
-    serdes_pattern = pattern_to_serdes_16to1(pattern6, clock_state=0)
+    serdes_pattern = pattern_to_serdes_16to1(pattern6, padding_ck_toggle=False, padding_ck_value=0)
     print(f"\nSERDES 16:1 pattern (hex):\n{serdes_pattern}")
     print(f"SERDES length: {len(serdes_pattern)} hex chars\n")
     

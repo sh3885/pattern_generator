@@ -14,6 +14,6 @@ for pin in ca_pins:
     print('Final MISR: ' + final_misr)
     
     # SERDES 16:1 conversion
-    serdes_pattern = pattern_generator.pattern_to_serdes_16to1(pattern, clock_state=0)
+    serdes_pattern = pattern_generator.pattern_to_serdes_16to1(pattern, padding_ck_toggle=False, padding_ck_value=0)
     print('SERDES 16:1 Pattern: ' + serdes_pattern)
     print()
