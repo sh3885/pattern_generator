@@ -397,9 +397,10 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
         combined_bits = 0
         bit_pos = 0
         
-        for frame in block_frames:
-            for i in range(27):
-                bit = (frame >> i) & 1
+        # For each bit position (0-26), collect 16 bits from 16 frames
+        for bit_idx in range(27):  # R0 to RD_EN
+            for frame in block_frames:
+                bit = (frame >> bit_idx) & 1
                 combined_bits |= (bit << bit_pos)
                 bit_pos += 1
         
@@ -418,9 +419,16 @@ def serdes_16to1_to_pattern(serdes_hex, num_frames=16):
     serdes_int = int(serdes_hex, 16)
     frames = []
     mask = (1 << 27) - 1
+    
+    # For each frame, reconstruct 27 bits from bit positions
     for frame_idx in range(num_frames):
-        frame_value = (serdes_int >> (frame_idx * 27)) & mask
+        frame_value = 0
+        for bit_idx in range(27):
+            bit_pos = frame_idx + bit_idx * 16  # Each bit position has 16 frames
+            bit = (serdes_int >> bit_pos) & 1
+            frame_value |= (bit << bit_idx)
         frames.append(f"{frame_value:08X}")
+    
     return frames
 
 
@@ -445,8 +453,8 @@ def test_ca_training():
     print(f"\nFinal Hex: {pattern3}\n")
     print("="*80 + "\n")
     
-    print("=== Test 5: R0 Training with sequence '00111100' repeated for 4 clocks (16 frames) ===\n")
-    pattern5 = generate_ca_training_pattern("R0", "0011110000111100", clock_toggle=True, num_frames=16)
+    print("=== Test 5: R0 Training with sequence '00111100' repeated for 12 clocks (48 frames) ===\n")
+    pattern5 = generate_ca_training_pattern("R0", "0011110000111100", clock_toggle=True, num_frames=48)
     print(f"Final Hex: {pattern5}\n")
     steps5 = get_aword_misr_steps(pattern5)
     for clock, word, pre, lfsr, post in steps5:
