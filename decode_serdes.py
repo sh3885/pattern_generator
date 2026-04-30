@@ -6,7 +6,7 @@ serdes_hex = '01FFFF403FFFE803FFFD807FFFB01FFFF603FFFEC03FFFD007FFFA01FFFF403FFF
 # Total bits in hex
 total_bits = len(serdes_hex) * 4
 frames_per_block = 16
-bits_per_frame = 27
+bits_per_frame = 28
 total_frames = total_bits // bits_per_frame
 
 print(f'Hex 데이터 총 길이: {len(serdes_hex)} chars ({total_bits} bits)')
@@ -18,7 +18,7 @@ frames = serdes_16to1_to_pattern(serdes_hex, num_frames=total_frames)
 
 for frame_idx, frame_hex in enumerate(frames):
     frame_int = int(frame_hex, 16)
-    bits_27 = format(frame_int & 0x7FFFFFF, '027b')  # 27 bits
-    print(f'Frame {frame_idx:2d}: {bits_27} | {frame_hex}')
+    bits_28 = format(frame_int & 0xFFFFFFF, '028b')  # 28 bits
+    print(f'Frame {frame_idx:2d}: {bits_28} | {frame_hex}')
 
 print('=' * 80)

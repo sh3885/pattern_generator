@@ -20,7 +20,7 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
     BIT_NAMES = [
         'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
         'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
-        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'RD_EN'
+        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'PC0_RD_EN', 'PC1_RD_EN'
     ]
 
     CA_INDICES = list(range(19))
@@ -57,7 +57,7 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
     ck_state = 0
 
     for frame_idx in range(num_frames):
-        bits = [0] * 27
+        bits = [0] * 28
 
         # Set CA pins with default values
         bits[0] = 0  # R0: LOW
@@ -82,13 +82,14 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
             ck_state = 0
         
         bits[19] = ck_state
-        bits[20] = 0  # WDQS fixed to 0
-        bits[21] = 0
-        bits[22] = 0
-        bits[23] = 0
-        bits[24] = 0
-        bits[25] = 0
-        bits[26] = 0
+        bits[20] = 0  # PC0_WDQS fixed to 0
+        bits[21] = 0  # PC1_WDQS fixed to 0
+        bits[22] = 0  # PC0_WTPH fixed to 0
+        bits[23] = 0  # PC1_WTPH fixed to 0
+        bits[24] = 0  # PC0_RTPH fixed to 0
+        bits[25] = 0  # PC1_RTPH fixed to 0
+        bits[26] = 0  # PC0_RD_EN fixed to 0
+        bits[27] = 0  # PC1_RD_EN fixed to 0
 
         # Convert bits to int (LSB first)
         frame_int = 0
@@ -100,9 +101,9 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
         pattern_hex += frame_hex
         
         if DEBUG_MODE:
-            bits_str = bin(frame_int)[2:].zfill(27)
+            bits_str = bin(frame_int)[2:].zfill(28)
             target_val = bits[target_index] if target_index < 19 else 0
-            print(f"Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]} WDQS={bits[20]} WTPH={bits[22]} RTPH={bits[24]} RDEN={bits[26]} {target_ca}={target_val}")
+            print(f"Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]} WDQS={bits[20]} WTPH={bits[22]} RTPH={bits[24]} RD_EN={bits[26]},{bits[27]} {target_ca}={target_val}")
 
     return pattern_hex
 
@@ -124,7 +125,7 @@ def generate_init_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     BIT_NAMES = [
         'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
         'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
-        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'RD_EN'
+        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'PC0_RD_EN', 'PC1_RD_EN'
     ]
     
     pattern_hex = ""
@@ -132,7 +133,7 @@ def generate_init_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     
     for clock_idx in range(num_clocks):
         for frame_idx in range(16):
-            bits = [0] * 27
+            bits = [0] * 28
             
             # CA signals: R0=0, R1=1, R2=0, R3=1, others=1
             bits[0] = 0  # R0
@@ -160,7 +161,7 @@ def generate_init_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
             pattern_hex += frame_hex
             
             if DEBUG_MODE:
-                bits_str = bin(frame_int)[2:].zfill(27)
+                bits_str = bin(frame_int)[2:].zfill(28)
                 print(f"PDE Clock {clock_idx} Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]}")
     
     return pattern_hex
@@ -183,7 +184,7 @@ def generate_init_pdx_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     BIT_NAMES = [
         'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
         'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
-        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'RD_EN'
+        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'PC0_RD_EN', 'PC1_RD_EN'
     ]
     
     pattern_hex = ""
@@ -191,7 +192,7 @@ def generate_init_pdx_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     
     for clock_idx in range(num_clocks):
         for frame_idx in range(16):
-            bits = [0] * 27
+            bits = [0] * 28
             
             # All CA signals = 1
             for i in range(19):
@@ -215,7 +216,7 @@ def generate_init_pdx_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
             pattern_hex += frame_hex
             
             if DEBUG_MODE:
-                bits_str = bin(frame_int)[2:].zfill(27)
+                bits_str = bin(frame_int)[2:].zfill(28)
                 print(f"PDX Clock {clock_idx} Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]}")
     
     return pattern_hex
@@ -246,8 +247,8 @@ def extract_aword_input_words(hex_pattern):
         low_frame = int(block[0:8], 16)
         high_frame = int(block[16:24], 16)
 
-        low_bits = [(low_frame >> i) & 1 for i in range(27)]
-        high_bits = [(high_frame >> i) & 1 for i in range(27)]
+        low_bits = [(low_frame >> i) & 1 for i in range(28)]
+        high_bits = [(high_frame >> i) & 1 for i in range(28)]
 
         word = 0
         bit_pos = 0
@@ -333,7 +334,7 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
     """
     Convert CA training pattern to SERDES 16:1 format.
     
-    Takes 16 frames of 27-bit data and converts to SERDES 16:1 output.
+    Takes 16 frames of 28-bit data and converts to SERDES 16:1 output.
     Pads with default values if pattern is not a multiple of 16 frames.
     
     Args:
@@ -347,18 +348,18 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
     BIT_NAMES = [
         'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
         'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
-        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'RD_EN'
+        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'PC0_RD_EN', 'PC1_RD_EN'
     ]
     
     # Padding frame: R0~R10, C0~C7 = HIGH, CK = toggled, rest = LOW
     def create_padding_frame(ck_val):
-        bits = [0] * 27
+        bits = [0] * 28
         for i in range(11):  # R0~R10
             bits[i] = 1
         for i in range(11, 19):  # C0~C7
             bits[i] = 1
         bits[19] = ck_val  # HBM_CK (already toggled from outside)
-        # bits[20:27] = 0 (WDQS, WTPH, RTPH, RD_EN all LOW) - default initialized to 0
+        # bits[20:28] = 0 (WDQS, WTPH, RTPH, RD_EN all LOW) - default initialized to 0
         frame_int = 0
         for i, bit in enumerate(bits):
             frame_int |= (bit << i)
@@ -371,8 +372,8 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
     for i in range(num_frames):
         frame_hex = hex_pattern[i * 8:(i + 1) * 8]
         frame_int = int(frame_hex, 16)
-        frame_27bit = frame_int & 0x7FFFFFF  # Keep only 27 bits
-        frames.append(frame_27bit)
+        frame_28bit = frame_int & 0xFFFFFFF  # Keep only 28 bits
+        frames.append(frame_28bit)
     
     # Pad to multiple of 16 frames
     if len(frames) > 0:
@@ -393,12 +394,12 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
     for block_idx in range(len(frames) // 16):
         block_frames = frames[block_idx * 16:(block_idx + 1) * 16]
         
-        # Concatenate 16 frames of 27 bits = 432 bits = 108 hex chars (round up)
+        # Concatenate 16 frames of 28 bits = 448 bits = 112 hex chars (round up)
         combined_bits = 0
         bit_pos = 0
         
-        # For each bit position (0-26), collect 16 bits from 16 frames
-        for bit_idx in range(27):  # R0 to RD_EN
+        # For each bit position (0-27), collect 16 bits from 16 frames
+        for bit_idx in range(28):  # R0 to PC1_RD_EN
             for frame in block_frames:
                 bit = (frame >> bit_idx) & 1
                 combined_bits |= (bit << bit_pos)
@@ -414,16 +415,16 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
 
 def serdes_16to1_to_pattern(serdes_hex, num_frames=16):
     """
-    Convert SERDES 16:1 hex output back into 27-bit frame hex strings.
+    Convert SERDES 16:1 hex output back into 28-bit frame hex strings.
     """
     serdes_int = int(serdes_hex, 16)
     frames = []
-    mask = (1 << 27) - 1
+    mask = (1 << 28) - 1
     
-    # For each frame, reconstruct 27 bits from bit positions
+    # For each frame, reconstruct 28 bits from bit positions
     for frame_idx in range(num_frames):
         frame_value = 0
-        for bit_idx in range(27):
+        for bit_idx in range(28):
             bit_pos = frame_idx + bit_idx * 16  # Each bit position has 16 frames
             bit = (serdes_int >> bit_pos) & 1
             frame_value |= (bit << bit_idx)
@@ -474,14 +475,14 @@ def test_ca_training():
     print(f"Original length: {len(pattern6)} hex chars\n")
     
     # Display original pattern frames in binary
-    print("Original Pattern Frames (27-bit binary):")
+    print("Original Pattern Frames (28-bit binary):")
     num_frames = len(pattern6) // 8
     orig_frames = []
     for i in range(num_frames):
         frame_hex = pattern6[i * 8:(i + 1) * 8]
-        frame_int = int(frame_hex, 16) & 0x7FFFFFF
+        frame_int = int(frame_hex, 16) & 0xFFFFFFF
         orig_frames.append(frame_int)
-        print(f"  Frame {i:2d}: {format(frame_int, '027b')} ({frame_hex})")
+        print(f"  Frame {i:2d}: {format(frame_int, '028b')} ({frame_hex})")
     
     # Perform SERDES conversion and collect padding frames
     serdes_pattern = pattern_to_serdes_16to1(pattern6, padding_ck_toggle=False, padding_ck_value=0)
@@ -489,11 +490,11 @@ def test_ca_training():
     print(f"SERDES length: {len(serdes_pattern)} hex chars\n")
     
     # Reconstruct frames including padding for visualization
-    print("Frames after padding to 16 (27-bit binary):")
+    print("Frames after padding to 16 (28-bit binary):")
     all_frames = orig_frames.copy()
     ck_state = 0
     for i in range(8, 16):
-        bits = [0] * 27
+        bits = [0] * 28
         for j in range(11):  # R0~R10
             bits[j] = 1
         for j in range(11, 19):  # C0~C7
@@ -503,7 +504,7 @@ def test_ca_training():
         for j, bit in enumerate(bits):
             frame_int |= (bit << j)
         all_frames.append(frame_int)
-        print(f"  Frame {i:2d}: {format(frame_int, '027b')} (padding, CK={ck_state})")
+        print(f"  Frame {i:2d}: {format(frame_int, '028b')} (padding, CK={ck_state})")
         ck_state = (ck_state + 1) % 2
     
     # Verify SERDES round-trip conversion

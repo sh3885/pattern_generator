@@ -32,11 +32,11 @@ ca_map = {
     7: 'R7', 8: 'R8', 9: 'R9', 10: 'R10',
     11: 'C0', 12: 'C1', 13: 'C2', 14: 'C3', 15: 'C4',
     16: 'C5', 17: 'C6', 18: 'C7',
-    19: 'HBM_CK', 20: 'WDQS', 21: 'WTPH', 22: 'RTPH', 23: 'RDEN',
-    24: 'reserved1', 25: 'reserved2', 26: 'reserved3'
+    19: 'HBM_CK', 20: 'PC0_WDQS', 21: 'PC1_WDQS', 22: 'PC0_WTPH', 23: 'PC1_WTPH',
+    24: 'PC0_RTPH', 25: 'PC1_RTPH', 26: 'PC0_RD_EN', 27: 'PC1_RD_EN'
 }
 
-for bit_pos in range(27):
+for bit_pos in range(28):
     value_16bit = (serdes_int >> (bit_pos * 16)) & 0xFFFF
     binary = format(value_16bit, '016b')
     pin_name = ca_map.get(bit_pos, f'unknown{bit_pos}')

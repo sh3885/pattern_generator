@@ -22,10 +22,10 @@ print('SERDES output hex:', serdes[:50], '...')
 print('SERDES output length:', len(serdes), 'chars')
 print('SERDES binary length:', len(serdes_binary), 'bits')
 print()
-print('SERDES binary (432 bits in groups of 27):')
+print('SERDES binary (448 bits in groups of 28):')
 for i in range(16):
-    start = i * 27
-    end = (i + 1) * 27
+    start = i * 28
+    end = (i + 1) * 28
     chunk = serdes_binary[start:end]
     val = int(chunk, 2)
     in_original = False
