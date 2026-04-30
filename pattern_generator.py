@@ -57,7 +57,7 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
     ck_state = 0
 
     for frame_idx in range(num_frames):
-        bits = [0] * 28
+        bits = [0] * 30
 
         # Set CA pins with default values
         bits[0] = 0  # R0: LOW
@@ -90,6 +90,8 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
         bits[25] = 0  # PC1_RTPH fixed to 0
         bits[26] = 0  # PC0_RD_EN fixed to 0
         bits[27] = 0  # PC1_RD_EN fixed to 0
+        bits[28] = 0  # reserved0 fixed to 0
+        bits[29] = 0  # reserved1 fixed to 0
 
         # Convert bits to int (LSB first)
         frame_int = 0
@@ -101,7 +103,7 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
         pattern_hex += frame_hex
         
         if DEBUG_MODE:
-            bits_str = bin(frame_int)[2:].zfill(28)
+            bits_str = bin(frame_int)[2:].zfill(30)
             target_val = bits[target_index] if target_index < 19 else 0
             print(f"Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]} WDQS={bits[20]} WTPH={bits[22]} RTPH={bits[24]} RD_EN={bits[26]},{bits[27]} {target_ca}={target_val}")
 
@@ -132,8 +134,8 @@ def generate_init_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     ck_state = 0  # Start from low
     
     for clock_idx in range(num_clocks):
-        for frame_idx in range(16):
-            bits = [0] * 28
+        for frame_idx in range(4):
+            bits = [0] * 30
             
             # CA signals: R0=0, R1=1, R2=0, R3=1, others=1
             bits[0] = 0  # R0
@@ -161,7 +163,7 @@ def generate_init_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
             pattern_hex += frame_hex
             
             if DEBUG_MODE:
-                bits_str = bin(frame_int)[2:].zfill(28)
+                bits_str = bin(frame_int)[2:].zfill(30)
                 print(f"PDE Clock {clock_idx} Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]}")
     
     return pattern_hex
@@ -184,15 +186,15 @@ def generate_init_pdx_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     BIT_NAMES = [
         'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
         'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
-        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'PC0_RD_EN', 'PC1_RD_EN'
+        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'PC0_RD_EN', 'PC1_RD_EN', 'reserved0', 'reserved1'
     ]
     
     pattern_hex = ""
     ck_state = 0  # Start from low
     
     for clock_idx in range(num_clocks):
-        for frame_idx in range(16):
-            bits = [0] * 28
+        for frame_idx in range(4):
+            bits = [0] * 30
             
             # All CA signals = 1
             for i in range(19):
@@ -216,7 +218,7 @@ def generate_init_pdx_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
             pattern_hex += frame_hex
             
             if DEBUG_MODE:
-                bits_str = bin(frame_int)[2:].zfill(28)
+                bits_str = bin(frame_int)[2:].zfill(30)
                 print(f"PDX Clock {clock_idx} Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]}")
     
     return pattern_hex
