@@ -75,9 +75,9 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
             else:
                 bits[idx] = 1
 
-        # Clock: toggle every 2 frames
+        # Clock: toggle every 16 frames (HBM4 CA training standard)
         if clock_toggle:
-            ck_state = (frame_idx // 2) % 2
+            ck_state = (frame_idx // 16) % 2
         else:
             ck_state = 0
         
