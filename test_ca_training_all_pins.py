@@ -1,4 +1,5 @@
 import pattern_generator
+import analyze_serdes_16bit
 pattern_generator.DEBUG_MODE = False
 
 ca_pins = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']
@@ -16,4 +17,6 @@ for pin in ca_pins:
     # SERDES 16:1 conversion
     serdes_pattern = pattern_generator.pattern_to_serdes_16to1(pattern, padding_ck_toggle=False, padding_ck_value=0)
     print('SERDES 16:1 Pattern: ' + serdes_pattern)
+    print('--- Analyze SERDES pattern for ' + pin + ' ---')
+    analyze_serdes_16bit.analyze_serdes_pattern(serdes_pattern)
     print()
