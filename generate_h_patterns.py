@@ -29,40 +29,40 @@ def hex_string_to_30bit_frames(hex_str):
     return frames
 
 
-def pack_frames_to_u64(frames):
-    """Pack 30-bit frames into a list of u64 values without dummy bits."""
+def pack_frames_to_u48(frames):
+    """Pack 30-bit frames into a list of 48-bit values."""
     bits = 0
     bit_count = 0
-    u64_values = []
+    u48_values = []
 
     for frame in frames:
         bits |= (frame << bit_count)
         bit_count += 30
 
-        while bit_count >= 64:
-            word = bits & ((1 << 64) - 1)
-            u64_values.append(word)
-            bits >>= 64
-            bit_count -= 64
+        while bit_count >= 48:
+            word = bits & ((1 << 48) - 1)
+            u48_values.append(word)
+            bits >>= 48
+            bit_count -= 48
 
     if bit_count > 0:
-        u64_values.append(bits)
+        u48_values.append(bits)
 
-    return u64_values
+    return u48_values
 
 
-def u64_array_to_hex_frames(u64_values, num_frames):
-    """Decode packed u64 values back into 30-bit frames."""
+def u48_array_to_hex_frames(u48_values, num_frames):
+    """Decode packed 48-bit values back into 30-bit frames."""
     bits = 0
     bit_count = 0
     frame_values = []
-    word_iter = iter(u64_values)
+    word_iter = iter(u48_values)
     current_word = next(word_iter, 0)
 
     for _ in range(num_frames):
         while bit_count < 30:
             bits |= current_word << bit_count
-            bit_count += 64
+            bit_count += 48
             current_word = next(word_iter, 0)
 
         frame = bits & ((1 << 30) - 1)
@@ -73,8 +73,8 @@ def u64_array_to_hex_frames(u64_values, num_frames):
     return frame_values
 
 
-def format_u64_value(value):
-    return f"0x{value:016X}"
+def format_u48_value(value):
+    return f"0x{value:012X}"
 
 
 def decode_frame(frame_int):
@@ -83,14 +83,14 @@ def decode_frame(frame_int):
     return ''.join(str(bit) for bit in reversed(bits)), ', '.join(fields)
 
 
-def debug_pattern(name, hex_pattern, u64_values):
+def debug_pattern(name, hex_pattern, u48_values):
     frames = hex_string_to_30bit_frames(hex_pattern)
-    decoded_frames = u64_array_to_hex_frames(u64_values, len(frames))
+    decoded_frames = u48_array_to_hex_frames(u48_values, len(frames))
     print(f"DEBUG {name}")
     print(f"  frames: {len(frames)}")
     print(f"  bits total: {len(frames) * 30}")
-    print(f"  u64 words: {len(u64_values)}")
-    print(f"  first u64: {format_u64_value(u64_values[0])}")
+    print(f"  u48 words: {len(u48_values)}")
+    print(f"  first u48: {format_u48_value(u48_values[0])}")
     for idx in range(min(4, len(frames))):
         original_bits, original_fields = decode_frame(frames[idx])
         decoded_bits, decoded_fields = decode_frame(decoded_frames[idx])
@@ -109,15 +109,15 @@ def debug_pattern(name, hex_pattern, u64_values):
     print("")
 
 
-def hex_to_u64_values(hex_str):
-    """Convert hex string to packed u64 integer values without dummy bits."""
+def hex_to_u48_values(hex_str):
+    """Convert hex string to packed 48-bit integer values."""
     frames = hex_string_to_30bit_frames(hex_str)
-    return pack_frames_to_u64(frames)
+    return pack_frames_to_u48(frames)
 
 
-def hex_to_u64_array(hex_str):
-    """Convert hex string to packed u64 values without dummy bits."""
-    return [format_u64_value(val) for val in hex_to_u64_values(hex_str)]
+def hex_to_u48_array(hex_str):
+    """Convert hex string to packed 48-bit values."""
+    return [format_u48_value(val) for val in hex_to_u48_values(hex_str)]
 
 
 def generate_ca_training_patterns():
@@ -168,14 +168,14 @@ def write_h_file(patterns, filename, header_guard):
 
         for name, hex_pattern in patterns.items():
             frames = hex_string_to_30bit_frames(hex_pattern)
-            u64_array = hex_to_u64_array(hex_pattern)
-            length = len(u64_array)
+            u48_array = hex_to_u48_array(hex_pattern)
+            length = len(u48_array)
             f.write(f"// Original hex pattern: {hex_pattern}\n")
-            f.write(f"// Packed 30-bit frames: {len(frames)}, u64 words: {length}\n")
+            f.write(f"// Packed 30-bit frames: {len(frames)}, u48 words: {length}\n")
             f.write(f"// Bit packing: frame0 LSB-first in word0\n")
             f.write(f"static const uint64_t {name}[{length}] = {{\n")
-            for i, val in enumerate(u64_array):
-                if i < len(u64_array) - 1:
+            for i, val in enumerate(u48_array):
+                if i < len(u48_array) - 1:
                     f.write(f"    {val},\n")
                 else:
                     f.write(f"    {val}\n")
@@ -209,7 +209,7 @@ if __name__ == "__main__":
     # Debug output: verify packed patterns and decode back
     print("\nDebugging CA training patterns...")
     for name, pattern in ca_patterns.items():
-        debug_pattern(name, pattern, hex_to_u64_values(pattern))
+        debug_pattern(name, pattern, hex_to_u48_values(pattern))
 
     print("Debugging init patterns...")
     for name, pattern in init_patterns.items():
