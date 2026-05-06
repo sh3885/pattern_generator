@@ -171,9 +171,9 @@ def generate_init_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
 
 def generate_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     """
-    Generate PDE pattern with 2-frame CK toggle unit.
+    Generate PDE pattern with 4-frame CK toggle unit.
 
-    Creates 16 frames per clock with R0=0, R1=1, R2=0, R3=1, other CA=1,
+    Creates 4 frames per clock with R0=0, R1=1, R2=0, R3=1, other CA=1,
     CK toggles every 2 frames when clock_toggle=True, otherwise uses fixed CK.
     """
     BIT_NAMES = [
@@ -186,7 +186,7 @@ def generate_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     ck_state = 0  # Start from low
     
     for clock_idx in range(num_clocks):
-        for frame_idx in range(16):
+        for frame_idx in range(4):
             bits = [0] * 30
             
             # CA signals: R0=0, R1=1, R2=0, R3=1, others=1
@@ -215,7 +215,7 @@ def generate_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
             
             if DEBUG_MODE:
                 bits_str = bin(frame_int)[2:].zfill(30)
-                print(f"PDE2 Clock {clock_idx} Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]}")
+                print(f"PDE4 Clock {clock_idx} Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]}")
     
     return pattern_hex
 
