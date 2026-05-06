@@ -29,48 +29,10 @@ def hex_string_to_30bit_frames(hex_str):
     return frames
 
 
-def pack_frames_to_u48(frames):
-    """Pack 30-bit frames into a list of 48-bit values."""
-    bits = 0
-    bit_count = 0
-    u48_values = []
-
-    for frame in frames:
-        bits |= (frame << bit_count)
-        bit_count += 30
-
-        while bit_count >= 48:
-            word = bits & ((1 << 48) - 1)
-            u48_values.append(word)
-            bits >>= 48
-            bit_count -= 48
-
-    if bit_count > 0:
-        u48_values.append(bits)
-
-    return u48_values
-
-
-def u48_array_to_hex_frames(u48_values, num_frames):
-    """Decode packed 48-bit values back into 30-bit frames."""
-    bits = 0
-    bit_count = 0
-    frame_values = []
-    word_iter = iter(u48_values)
-    current_word = next(word_iter, 0)
-
-    for _ in range(num_frames):
-        while bit_count < 30:
-            bits |= current_word << bit_count
-            bit_count += 48
-            current_word = next(word_iter, 0)
-
-        frame = bits & ((1 << 30) - 1)
-        frame_values.append(frame)
-        bits >>= 30
-        bit_count -= 30
-
-    return frame_values
+def u48_array_to_hex_string(u48_values, original_length):
+    """Decode packed 48-bit values back into a raw hex string."""
+    hex_str = ''.join(f"{value:012X}" for value in u48_values)
+    return hex_str[:original_length]
 
 
 def format_u48_value(value):
@@ -83,52 +45,53 @@ def decode_frame(frame_int):
     return ''.join(str(bit) for bit in reversed(bits)), ', '.join(fields)
 
 
-def debug_pattern(name, hex_pattern, u48_values):
-    frames = hex_string_to_30bit_frames(hex_pattern)
-    decoded_frames = u48_array_to_hex_frames(u48_values, len(frames))
+def debug_pattern(name, serdes_hex, u48_values):
+    decoded_hex = u48_array_to_hex_string(u48_values, len(serdes_hex))
     print(f"DEBUG {name}")
-    print(f"  frames: {len(frames)}")
-    print(f"  bits total: {len(frames) * 30}")
-    print(f"  u48 words: {len(u48_values)}")
+    print(f"  original serdes hex length: {len(serdes_hex)}")
+    print(f"  packed 48-bit words: {len(u48_values)}")
     print(f"  first u48: {format_u48_value(u48_values[0])}")
-    for idx in range(min(4, len(frames))):
-        original_bits, original_fields = decode_frame(frames[idx])
-        decoded_bits, decoded_fields = decode_frame(decoded_frames[idx])
-        original_hex = f"0x{frames[idx]:08X}"
-        decoded_hex = f"0x{decoded_frames[idx]:08X}"
-        print(f"  frame[{idx}] original={original_bits} hex={original_hex} decoded={decoded_bits} hex={decoded_hex}")
-        if frames[idx] != decoded_frames[idx]:
-            print(f"    MISMATCH at frame {idx}: original 0x{frames[idx]:08X} decoded 0x{decoded_frames[idx]:08X}")
-    if len(frames) > 4:
-        idx = len(frames) - 1
-        original_bits, _ = decode_frame(frames[idx])
-        decoded_bits, _ = decode_frame(decoded_frames[idx])
-        original_hex = f"0x{frames[idx]:08X}"
-        decoded_hex = f"0x{decoded_frames[idx]:08X}"
-        print(f"  frame[{idx}] original={original_bits} hex={original_hex} decoded={decoded_bits} hex={decoded_hex}")
+    print(f"  original == decoded: {serdes_hex == decoded_hex}")
+    if serdes_hex != decoded_hex:
+        print(f"  MISMATCH: decoded hex differs")
+        print(f"  original prefix: {serdes_hex[:48]}")
+        print(f"  decoded  prefix: {decoded_hex[:48]}")
     print("")
 
 
 def hex_to_u48_values(hex_str):
-    """Convert hex string to packed 48-bit integer values."""
-    frames = hex_string_to_30bit_frames(hex_str)
-    return pack_frames_to_u48(frames)
+    """Convert any hex string to packed 48-bit integer values."""
+    padded = hex_str
+    if len(padded) % 12 != 0:
+        padded = padded.ljust(((len(padded) + 11) // 12) * 12, '0')
+
+    u48_values = []
+    for i in range(0, len(padded), 12):
+        chunk = padded[i:i+12]
+        u48_values.append(int(chunk, 16))
+
+    return u48_values
 
 
 def hex_to_u48_array(hex_str):
-    """Convert hex string to packed 48-bit values."""
+    """Convert any hex string to packed 48-bit values formatted as hex strings."""
     return [format_u48_value(val) for val in hex_to_u48_values(hex_str)]
 
 
 def generate_ca_training_patterns():
     """
     Generate CA training patterns like in test_ca_training_all_pins.py
+    With 2 clock toggle preamble before actual training
     """
     patterns = {}
     ca_pins = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']
 
+    # 2 clock toggle preamble (R0~R3 default, R4~C7=1, HBM_CK toggle)
+    preamble = pattern_generator.generate_init_pde_pattern(num_clocks=2, clock_toggle=True)
+
     for pin in ca_pins:
-        pattern = pattern_generator.generate_ca_training_pattern(pin, '00111100', clock_toggle=True, num_frames=48)
+        training = pattern_generator.generate_ca_training_pattern(pin, '00111100', clock_toggle=True, num_frames=48)
+        pattern = preamble + training
         patterns[f"ca_training_{pin}"] = pattern
 
     return patterns
@@ -157,7 +120,7 @@ def generate_init_patterns():
 
     return patterns
 
-def write_h_file(patterns, filename, header_guard):
+def write_h_file(patterns, filename, header_guard, padding_ck_toggle=True, padding_ck_value=0):
     """
     Write patterns to .h file
     """
@@ -167,18 +130,19 @@ def write_h_file(patterns, filename, header_guard):
         f.write("#include <stdint.h>\n\n")
 
         for name, hex_pattern in patterns.items():
-            frames = hex_string_to_30bit_frames(hex_pattern)
-            u48_array = hex_to_u48_array(hex_pattern)
-            length = len(u48_array)
+            serdes_pattern = pattern_generator.pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=padding_ck_toggle, padding_ck_value=padding_ck_value)
+            u48_values = hex_to_u48_values(serdes_pattern)
+            length = len(u48_values)
             f.write(f"// Original hex pattern: {hex_pattern}\n")
-            f.write(f"// Packed 30-bit frames: {len(frames)}, u48 words: {length}\n")
-            f.write(f"// Bit packing: frame0 LSB-first in word0\n")
+            f.write(f"// SERDES 16:1 hex length: {len(serdes_pattern)}\n")
+            f.write(f"// Packed 48-bit words: {length}\n")
             f.write(f"static const uint64_t {name}[{length}] = {{\n")
-            for i, val in enumerate(u48_array):
-                if i < len(u48_array) - 1:
-                    f.write(f"    {val},\n")
+            for i, val in enumerate(u48_values):
+                formatted = format_u48_value(val)
+                if i < len(u48_values) - 1:
+                    f.write(f"    {formatted},\n")
                 else:
-                    f.write(f"    {val}\n")
+                    f.write(f"    {formatted}\n")
             f.write("};\n\n")
 
         f.write(f"#endif // {header_guard}\n")
@@ -199,18 +163,20 @@ if __name__ == "__main__":
         print(f"  {name}: {pattern[:32]}... (length: {len(pattern)//8} frames)")
 
     # Write CA training patterns to separate file
-    write_h_file(ca_patterns, "pattern_ca_training.h", "PATTERN_CA_TRAINING_H")
+    write_h_file(ca_patterns, "pattern_ca_training.h", "PATTERN_CA_TRAINING_H", padding_ck_toggle=False, padding_ck_value=0)
     print("Wrote CA training patterns to pattern_ca_training.h")
 
     # Write init patterns to separate file
-    write_h_file(init_patterns, "pattern_init.h", "PATTERN_INIT_H")
+    write_h_file(init_patterns, "pattern_init.h", "PATTERN_INIT_H", padding_ck_toggle=True, padding_ck_value=0)
     print("Wrote init patterns to pattern_init.h")
 
     # Debug output: verify packed patterns and decode back
     print("\nDebugging CA training patterns...")
     for name, pattern in ca_patterns.items():
-        debug_pattern(name, pattern, hex_to_u48_values(pattern))
+        serdes_pattern = pattern_generator.pattern_to_serdes_16to1(pattern, padding_ck_toggle=False, padding_ck_value=0)
+        debug_pattern(name, serdes_pattern, hex_to_u48_values(serdes_pattern))
 
     print("Debugging init patterns...")
     for name, pattern in init_patterns.items():
-        debug_pattern(name, pattern, hex_to_u64_values(pattern))
+        serdes_pattern = pattern_generator.pattern_to_serdes_16to1(pattern, padding_ck_toggle=True, padding_ck_value=0)
+        debug_pattern(name, serdes_pattern, hex_to_u48_values(serdes_pattern))
