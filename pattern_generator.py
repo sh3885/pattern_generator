@@ -169,6 +169,57 @@ def generate_init_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     return pattern_hex
 
 
+def generate_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
+    """
+    Generate PDE pattern with 2-frame CK toggle unit.
+
+    Creates 16 frames per clock with R0=0, R1=1, R2=0, R3=1, other CA=1,
+    CK toggles every 2 frames when clock_toggle=True, otherwise uses fixed CK.
+    """
+    BIT_NAMES = [
+        'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
+        'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
+        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'PC0_RD_EN', 'PC1_RD_EN', 'reserved0', 'reserved1'
+    ]
+    
+    pattern_hex = ""
+    ck_state = 0  # Start from low
+    
+    for clock_idx in range(num_clocks):
+        for frame_idx in range(16):
+            bits = [0] * 30
+            
+            # CA signals: R0=0, R1=1, R2=0, R3=1, others=1
+            bits[0] = 0  # R0
+            bits[1] = 1  # R1
+            bits[2] = 0  # R2
+            bits[3] = 1  # R3
+            for i in range(4, 19):  # R4~R10, C0~C7
+                bits[i] = 1
+            
+            # CK toggles every 2 frames when enabled
+            if clock_toggle:
+                ck_state = (frame_idx // 2) % 2
+            else:
+                ck_state = clock_value
+            bits[19] = ck_state
+            
+            # Rest are 0 (default)
+            
+            frame_int = 0
+            for i, bit in enumerate(bits):
+                frame_int |= (bit << i)
+            
+            frame_hex = f"{frame_int:08X}"
+            pattern_hex += frame_hex
+            
+            if DEBUG_MODE:
+                bits_str = bin(frame_int)[2:].zfill(30)
+                print(f"PDE2 Clock {clock_idx} Frame {frame_idx}: {frame_hex} | {bits_str} | CK={bits[19]}")
+    
+    return pattern_hex
+
+
 def generate_init_pdx_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     """
     Generate PDX initialization pattern (hex string).
