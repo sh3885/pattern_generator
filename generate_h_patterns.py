@@ -147,6 +147,56 @@ def write_h_file(patterns, filename, header_guard, padding_ck_toggle=True, paddi
 
         f.write(f"#endif // {header_guard}\n")
 
+
+def write_ca_training_h_file(patterns, filename, header_guard, padding_ck_toggle=False, padding_ck_value=0):
+    """
+    Write CA training patterns to a 2D array header file.
+    """
+    names = list(patterns.keys())
+    row_count = len(names)
+    with open(filename, 'w') as f:
+        f.write(f"#ifndef {header_guard}\n")
+        f.write(f"#define {header_guard}\n\n")
+        f.write("#include <stdint.h>\n\n")
+
+        pin_names = ", ".join('"{}"'.format(name.replace("ca_training_", "")) for name in names)
+        f.write("// CA training pattern order: " + ", ".join(name.replace('ca_training_', '') for name in names) + "\n")
+        f.write(f"static const char* ca_training_pin_names[{row_count}] = {{{pin_names}}};\n\n")
+
+        # Convert all patterns to the same length
+        all_u48_values = []
+        lengths = []
+        for name in names:
+            hex_pattern = patterns[name]
+            serdes_pattern = pattern_generator.pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=padding_ck_toggle, padding_ck_value=padding_ck_value)
+            u48_values = hex_to_u48_values(serdes_pattern)
+            all_u48_values.append(u48_values)
+            lengths.append(len(u48_values))
+
+        if len(set(lengths)) != 1:
+            raise ValueError("All CA training patterns must have the same packed u48 length")
+
+        array_length = lengths[0]
+        f.write(f"// SERDES 16:1 hex length: {len(pattern_generator.pattern_to_serdes_16to1(patterns[names[0]], padding_ck_toggle=padding_ck_toggle, padding_ck_value=padding_ck_value))}\n")
+        f.write(f"// Packed 48-bit words per CA pattern: {array_length}\n")
+        f.write(f"static const uint64_t ca_training[{row_count}][{array_length}] = {{\n")
+
+        for name, u48_values in zip(names, all_u48_values):
+            f.write(f"    /* {name.replace('ca_training_', '')} */ {{\n")
+            for i, val in enumerate(u48_values):
+                formatted = format_u48_value(val)
+                if i < len(u48_values) - 1:
+                    f.write(f"        {formatted},\n")
+                else:
+                    f.write(f"        {formatted}\n")
+            f.write("    }")
+            if name != names[-1]:
+                f.write(",\n")
+            else:
+                f.write("\n")
+        f.write("};\n\n")
+        f.write(f"#endif // {header_guard}\n")
+
 if __name__ == "__main__":
     print("Generating patterns...")
 
@@ -162,8 +212,8 @@ if __name__ == "__main__":
     for name, pattern in init_patterns.items():
         print(f"  {name}: {pattern[:32]}... (length: {len(pattern)//8} frames)")
 
-    # Write CA training patterns to separate file
-    write_h_file(ca_patterns, "pattern_ca_training.h", "PATTERN_CA_TRAINING_H", padding_ck_toggle=False, padding_ck_value=0)
+    # Write CA training patterns to separate file as a 2D array
+    write_ca_training_h_file(ca_patterns, "pattern_ca_training.h", "PATTERN_CA_TRAINING_H", padding_ck_toggle=False, padding_ck_value=0)
     print("Wrote CA training patterns to pattern_ca_training.h")
 
     # Write init patterns to separate file
