@@ -60,7 +60,12 @@ def debug_pattern(name, serdes_hex, u48_values):
 
 
 def hex_to_u48_values(hex_str):
-    """Convert any hex string to packed 48-bit integer values."""
+    """Convert any hex string to packed 48-bit integer values.
+
+    The returned list is ordered so the least-significant 48-bit chunk comes
+    first, which matches the firmware array ordering used for packed SERDES
+    output.
+    """
     padded = hex_str
     if len(padded) % 12 != 0:
         padded = padded.ljust(((len(padded) + 11) // 12) * 12, '0')
@@ -70,7 +75,7 @@ def hex_to_u48_values(hex_str):
         chunk = padded[i:i+12]
         u48_values.append(int(chunk, 16))
 
-    return u48_values
+    return u48_values[::-1]
 
 
 def hex_to_u48_array(hex_str):
@@ -81,20 +86,22 @@ def hex_to_u48_array(hex_str):
 def generate_ca_training_patterns():
     """
     Generate CA training patterns like in test_ca_training_all_pins.py
-    With 2 clock toggle preamble before actual training
+    Use 48 frames (12 clocks) of CA training.
+    Returns patterns dict and misr list.
     """
     patterns = {}
+    misr_list = []
     ca_pins = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']
-
-    # 2 clock toggle preamble (R0~R3 default, R4~C7=1, HBM_CK toggle)
-    preamble = pattern_generator.generate_pde_pattern(num_clocks=2, clock_toggle=True)
 
     for pin in ca_pins:
         training = pattern_generator.generate_ca_training_pattern(pin, '00111100', clock_toggle=True, num_frames=48)
-        pattern = preamble + training
-        patterns[f"ca_training_{pin}"] = pattern
+        patterns[f"ca_training_{pin}"] = training
+        
+        # Calculate MISR values
+        misr_full = pattern_generator.get_aword_misr(training)
+        misr_list.append(misr_full)
 
-    return patterns
+    return patterns, misr_list
 
 def generate_init_patterns():
     """
@@ -148,9 +155,9 @@ def write_h_file(patterns, filename, header_guard, padding_ck_toggle=True, paddi
         f.write(f"#endif // {header_guard}\n")
 
 
-def write_ca_training_h_file(patterns, filename, header_guard, padding_ck_toggle=False, padding_ck_value=0):
+def write_ca_training_h_file(patterns, misr_list, filename, header_guard, padding_ck_toggle=False, padding_ck_value=0):
     """
-    Write CA training patterns to a 2D array header file.
+    Write CA training patterns to a 2D array header file, including MISR values.
     """
     names = list(patterns.keys())
     row_count = len(names)
@@ -195,13 +202,24 @@ def write_ca_training_h_file(patterns, filename, header_guard, padding_ck_toggle
             else:
                 f.write("\n")
         f.write("};\n\n")
+
+        # Add MISR array
+        f.write(f"// MISR signatures for CA training patterns (12 clocks)\n")
+        f.write(f"static const char* ca_training_misr[{row_count}] = {{\n")
+        for i, misr in enumerate(misr_list):
+            if i < len(misr_list) - 1:
+                f.write(f"    \"{misr}\",\n")
+            else:
+                f.write(f"    \"{misr}\"\n")
+        f.write("};\n\n")
+
         f.write(f"#endif // {header_guard}\n")
 
 if __name__ == "__main__":
     print("Generating patterns...")
 
     # Generate CA training patterns
-    ca_patterns = generate_ca_training_patterns()
+    ca_patterns, ca_misr_list = generate_ca_training_patterns()
     print(f"Generated {len(ca_patterns)} CA training patterns")
     for name, pattern in ca_patterns.items():
         print(f"  {name}: {pattern[:32]}... (length: {len(pattern)//8} frames)")
@@ -213,7 +231,7 @@ if __name__ == "__main__":
         print(f"  {name}: {pattern[:32]}... (length: {len(pattern)//8} frames)")
 
     # Write CA training patterns to separate file as a 2D array
-    write_ca_training_h_file(ca_patterns, "pattern_ca_training.h", "PATTERN_CA_TRAINING_H", padding_ck_toggle=False, padding_ck_value=0)
+    write_ca_training_h_file(ca_patterns, ca_misr_list, "pattern_ca_training.h", "PATTERN_CA_TRAINING_H", padding_ck_toggle=False, padding_ck_value=0)
     print("Wrote CA training patterns to pattern_ca_training.h")
 
     # Write init patterns to separate file

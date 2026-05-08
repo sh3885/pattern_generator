@@ -383,6 +383,69 @@ def get_aword_misr(hex_pattern, taps=[5, 4, 0], initial=0x2AAAAAAAAA, width=38):
     return f"{steps[-1][4]:0{(width + 3) // 4}X}"
 
 
+def validate_golden_ca_data():
+    """
+    Validate current CA pattern generation against golden reference data.
+    
+    Returns True if current output matches golden data, False otherwise.
+    Prints validation results.
+    """
+    import os
+    
+    # Generate current R0 pattern
+    training = generate_ca_training_pattern('R0', '00111100', clock_toggle=True, num_frames=48)
+    current_serdes = pattern_to_serdes_16to1(training, padding_ck_toggle=True, padding_ck_value=0)
+    
+    # Golden SERDES from ca_log.txt
+    golden_serdes = "0000000000000000000000000000000000000000CCCCFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" + \
+                   "FFFFFFFFFFFFFFFFFFFFFFFFFFFF0000FFFF3C3C0000000000000000000000000000000000000000" + \
+                   "CCCCFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000FFFF3C3C" + \
+                   "0000000000000000000000000000000000000000CCCCFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" + \
+                   "FFFFFFFFFFFFFFFFFFFFFFFFFFFF0000FFFF3C3C"
+    
+    # Check SERDES match
+    serdes_match = current_serdes == golden_serdes
+    
+    # Check header first element
+    try:
+        # Read current header file
+        header_file = os.path.join(os.path.dirname(__file__), "pattern_ca_training.h")
+        with open(header_file, 'r') as f:
+            content = f.read()
+        
+        # Find R0 first element
+        import re
+        r0_match = re.search(r'/\* R0 \*/ \{\s*\n\s*([^,\n]+)', content)
+        if r0_match:
+            current_first_element = r0_match.group(1).strip()
+            header_match = current_first_element == "0x0000FFFF3C3C"
+        else:
+            header_match = False
+            current_first_element = "NOT_FOUND"
+            
+    except Exception as e:
+        print(f"Error reading header file: {e}")
+        header_match = False
+        current_first_element = "ERROR"
+    
+    # Print results
+    print("=== CA Pattern Golden Data Validation ===")
+    print(f"SERDES match: {'✓' if serdes_match else '✗'}")
+    if not serdes_match:
+        print(f"  Current: {current_serdes[:50]}...")
+        print(f"  Golden:  {golden_serdes[:50]}...")
+    
+    print(f"Header R0 first element match: {'✓' if header_match else '✗'}")
+    if not header_match:
+        print(f"  Current: {current_first_element}")
+        print(f"  Golden:  0x0000FFFF3C3C")
+    
+    overall_match = serdes_match and header_match
+    print(f"Overall validation: {'PASS' if overall_match else 'FAIL'}")
+    
+    return overall_match
+
+
 def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_value=0):
     """
     Convert CA training pattern to SERDES 16:1 format.
@@ -478,12 +541,10 @@ def serdes_16to1_to_pattern(serdes_hex, num_frames=None):
     Returns:
         list[str]: Decoded frame hex strings.
     """
-    serdes_int = int(serdes_hex, 16)
-    total_bits = len(serdes_hex) * 4
-    if total_bits % 480 != 0:
+    if len(serdes_hex) % 120 != 0:
         raise ValueError("serdes_hex length must be a multiple of 120 hex chars (480 bits)")
 
-    num_blocks = total_bits // 480
+    num_blocks = len(serdes_hex) // 120
     total_frames = num_blocks * 16
     if num_frames is None:
         num_frames = total_frames
@@ -491,20 +552,19 @@ def serdes_16to1_to_pattern(serdes_hex, num_frames=None):
         raise ValueError(f"num_frames ({num_frames}) exceeds decoded frame count ({total_frames})")
 
     frames = []
-    for frame_index in range(num_frames):
-        block_idx = frame_index // 16
-        frame_in_block = frame_index % 16
-        frame_value = 0
-        block_offset = block_idx * 480
+    for block_idx in range(num_blocks):
+        block_hex = serdes_hex[block_idx * 120:(block_idx + 1) * 120]
+        block_int = int(block_hex, 16)
 
-        for bit_idx in range(30):
-            bit_pos = block_offset + bit_idx * 16 + frame_in_block
-            bit = (serdes_int >> bit_pos) & 1
-            frame_value |= (bit << bit_idx)
+        for frame_in_block in range(16):
+            frame_value = 0
+            for bit_idx in range(30):
+                bit_pos = bit_idx * 16 + frame_in_block
+                bit = (block_int >> bit_pos) & 1
+                frame_value |= (bit << bit_idx)
+            frames.append(f"{frame_value:08X}")
 
-        frames.append(f"{frame_value:08X}")
-
-    return frames
+    return frames[:num_frames]
 
 
 def test_ca_training():
