@@ -1,4 +1,4 @@
-import pattern_generator
+import generate_pattern
 
 def analyze_serdes_pattern(hex_value):
     """
@@ -13,7 +13,7 @@ def analyze_serdes_pattern(hex_value):
     num_frames = num_blocks * 16
     
     # Decode all frames
-    frames = pattern_generator.serdes_16to1_to_pattern(hex_value, num_frames=num_frames)
+    frames = generate_pattern.serdes_16to1_to_pattern(hex_value, num_frames=num_frames)
     
     print('=== SERDES 16:1 전체 프레임 디코드 ===')
     print('총 프레임 개수:', len(frames))

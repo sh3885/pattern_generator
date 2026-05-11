@@ -30,25 +30,27 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
 
     target_index = BIT_NAMES.index(target_ca)
 
+    training_frame_count = max(0, num_frames - 4)
+
     if isinstance(training_value, str):
         if set(training_value).issubset({'0', '1'}):
-            if len(training_value) == num_frames:
+            if len(training_value) == training_frame_count:
                 training_values = [int(b) for b in training_value]
             elif len(training_value) == 1:
-                training_values = [int(training_value)] * num_frames
+                training_values = [int(training_value)] * training_frame_count
             else:
-                # Cyclic pattern: repeat pattern until num_frames is reached
+                # Cyclic pattern: repeat pattern until training_frame_count is reached
                 pattern = [int(b) for b in training_value]
                 training_values = []
-                for i in range(num_frames):
+                for i in range(training_frame_count):
                     training_values.append(pattern[i % len(pattern)])
         else:
             raise ValueError("training_value string must contain only '0' or '1'")
     elif isinstance(training_value, int):
-        training_values = [int(training_value)] * num_frames
+        training_values = [int(training_value)] * training_frame_count
     elif isinstance(training_value, list):
-        if len(training_value) != num_frames:
-            raise ValueError("training_value list length must match num_frames")
+        if len(training_value) != training_frame_count:
+            raise ValueError("training_value list length must match num_frames - 4")
         training_values = [int(v) for v in training_value]
     else:
         raise ValueError("training_value must be int, str (sequence or single), or list")
@@ -59,23 +61,33 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
     for frame_idx in range(num_frames):
         bits = [0] * 30
 
-        # Set CA pins with default values
-        bits[0] = 0  # R0: LOW
-        bits[1] = 1  # R1: HIGH
-        bits[2] = 0  # R2: LOW
-        bits[3] = 1  # R3: HIGH
-        
-        # Apply target value for R0..R3 if needed
-        if target_index < 4:
-            bits[target_index] = training_values[frame_idx]
-
-        for idx in range(4, 19):  # R4~R10, C0~C7
-            if idx == target_index:
-                bits[idx] = training_values[frame_idx]
-            else:
+        if frame_idx < 4:
+            # First 4 frames: CA default values (no training applied)
+            bits[0] = 0  # R0: LOW
+            bits[1] = 1  # R1: HIGH
+            bits[2] = 0  # R2: LOW
+            bits[3] = 1  # R3: HIGH
+            for idx in range(4, 19):  # R4~R10, C0~C7
                 bits[idx] = 1
+        else:
+            # Frames 4+: Apply training value
+            training_idx = frame_idx - 4
+            bits[0] = 0  # R0: LOW
+            bits[1] = 1  # R1: HIGH
+            bits[2] = 0  # R2: LOW
+            bits[3] = 1  # R3: HIGH
+            
+            # Apply target value for R0..R3 if needed
+            if target_index < 4:
+                bits[target_index] = training_values[training_idx]
 
-        # Clock: toggle every 16 frames (HBM4 CA training standard)
+            for idx in range(4, 19):  # R4~R10, C0~C7
+                if idx == target_index:
+                    bits[idx] = training_values[training_idx]
+                else:
+                    bits[idx] = 1
+
+        # Clock: toggle every 2 frames
         if clock_toggle:
             ck_state = (frame_idx // 2) % 2
         else:
@@ -510,7 +522,9 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
     for block_idx in range(len(frames) // 16):
         block_frames = frames[block_idx * 16:(block_idx + 1) * 16]
         
-        # Concatenate 16 frames of 28 bits = 448 bits = 112 hex chars (round up)
+        # Concatenate 16 frames of 30 bits = 480 bits = 120 hex chars
+        # Each 16-bit group is packed LSB-first across frames:
+        #   bit0 = frame0, bit1 = frame1, ..., bit15 = frame15.
         combined_bits = 0
         bit_pos = 0
         
@@ -521,7 +535,9 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
                 combined_bits |= (bit << bit_pos)
                 bit_pos += 1
         
-        # Convert to hex (108 hex chars for 432 bits, padded to 128 for alignment)
+        # Convert to hex (120 hex chars for 480 bits)
+        # Note: hex string is big-endian, so the low-order 16-bit word for each
+        # block appears in the final 4 hex chars of that 120-char block.
         num_hex_chars = (bit_pos + 3) // 4
         serdes_hex = f"{combined_bits:0{num_hex_chars}X}"
         serdes_pattern += serdes_hex

@@ -3,11 +3,11 @@
 Script to generate .h file with patterns from test scripts
 """
 
-import pattern_generator
+import generate_pattern
 import analyze_serdes_16bit
 
 # Disable debug mode for cleaner output
-pattern_generator.DEBUG_MODE = False
+generate_pattern.DEBUG_MODE = False
 
 BIT_NAMES = [
     'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
@@ -94,11 +94,11 @@ def generate_ca_training_patterns():
     ca_pins = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']
 
     for pin in ca_pins:
-        training = pattern_generator.generate_ca_training_pattern(pin, '00111100', clock_toggle=True, num_frames=48)
+        training = generate_pattern.generate_ca_training_pattern(pin, '00111100', clock_toggle=True, num_frames=48)
         patterns[f"ca_training_{pin}"] = training
         
         # Calculate MISR values
-        misr_full = pattern_generator.get_aword_misr(training)
+        misr_full = generate_pattern.get_aword_misr(training)
         misr_list.append(misr_full)
 
     return patterns, misr_list
@@ -110,15 +110,15 @@ def generate_init_patterns():
     patterns = {}
 
     # PDE & CK Low 고정 (4nCK)
-    pattern_1 = pattern_generator.generate_init_pde_pattern(num_clocks=4, clock_toggle=False, clock_value=0)
+    pattern_1 = generate_pattern.generate_init_pde_pattern(num_clocks=4, clock_toggle=False, clock_value=0)
     patterns["init_pde_4nCK_low"] = pattern_1
 
     # PDE & CK toggle (20nCK)
-    pattern_2 = pattern_generator.generate_init_pde_pattern(num_clocks=20, clock_toggle=True)
+    pattern_2 = generate_pattern.generate_init_pde_pattern(num_clocks=20, clock_toggle=True)
     patterns["init_pde_20nCK_toggle"] = pattern_2
 
     # PDX & CK toggle (48nCK)
-    pattern_3 = pattern_generator.generate_init_pdx_pattern(num_clocks=48, clock_toggle=True)
+    pattern_3 = generate_pattern.generate_init_pdx_pattern(num_clocks=48, clock_toggle=True)
     patterns["init_pdx_48nCK_toggle"] = pattern_3
 
     # Combined pattern
@@ -137,7 +137,7 @@ def write_h_file(patterns, filename, header_guard, padding_ck_toggle=True, paddi
         f.write("#include <stdint.h>\n\n")
 
         for name, hex_pattern in patterns.items():
-            serdes_pattern = pattern_generator.pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=padding_ck_toggle, padding_ck_value=padding_ck_value)
+            serdes_pattern = generate_pattern.pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=padding_ck_toggle, padding_ck_value=padding_ck_value)
             u48_values = hex_to_u48_values(serdes_pattern)
             length = len(u48_values)
             f.write(f"// Original hex pattern: {hex_pattern}\n")
@@ -175,7 +175,7 @@ def write_ca_training_h_file(patterns, misr_list, filename, header_guard, paddin
         lengths = []
         for name in names:
             hex_pattern = patterns[name]
-            serdes_pattern = pattern_generator.pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=padding_ck_toggle, padding_ck_value=padding_ck_value)
+            serdes_pattern = generate_pattern.pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=padding_ck_toggle, padding_ck_value=padding_ck_value)
             u48_values = hex_to_u48_values(serdes_pattern)
             all_u48_values.append(u48_values)
             lengths.append(len(u48_values))
@@ -184,7 +184,7 @@ def write_ca_training_h_file(patterns, misr_list, filename, header_guard, paddin
             raise ValueError("All CA training patterns must have the same packed u48 length")
 
         array_length = lengths[0]
-        f.write(f"// SERDES 16:1 hex length: {len(pattern_generator.pattern_to_serdes_16to1(patterns[names[0]], padding_ck_toggle=padding_ck_toggle, padding_ck_value=padding_ck_value))}\n")
+        f.write(f"// SERDES 16:1 hex length: {len(generate_pattern.pattern_to_serdes_16to1(patterns[names[0]], padding_ck_toggle=padding_ck_toggle, padding_ck_value=padding_ck_value))}\n")
         f.write(f"// Packed 48-bit words per CA pattern: {array_length}\n")
         f.write(f"static const uint64_t ca_training[{row_count}][{array_length}] = {{\n")
 
@@ -241,10 +241,10 @@ if __name__ == "__main__":
     # Debug output: verify packed patterns and decode back
     print("\nDebugging CA training patterns...")
     for name, pattern in ca_patterns.items():
-        serdes_pattern = pattern_generator.pattern_to_serdes_16to1(pattern, padding_ck_toggle=False, padding_ck_value=0)
+        serdes_pattern = generate_pattern.pattern_to_serdes_16to1(pattern, padding_ck_toggle=False, padding_ck_value=0)
         debug_pattern(name, serdes_pattern, hex_to_u48_values(serdes_pattern))
 
     print("Debugging init patterns...")
     for name, pattern in init_patterns.items():
-        serdes_pattern = pattern_generator.pattern_to_serdes_16to1(pattern, padding_ck_toggle=True, padding_ck_value=0)
+        serdes_pattern = generate_pattern.pattern_to_serdes_16to1(pattern, padding_ck_toggle=True, padding_ck_value=0)
         debug_pattern(name, serdes_pattern, hex_to_u48_values(serdes_pattern))
