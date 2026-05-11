@@ -93,7 +93,7 @@ def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, n
         else:
             ck_state = 0
         
-        bits[19] = ck_state
+        bits[19] = 1 - ck_state
         bits[20] = 0  # PC0_WDQS fixed to 0
         bits[21] = 0  # PC1_WDQS fixed to 0
         bits[22] = 0  # PC0_WTPH fixed to 0
@@ -162,7 +162,7 @@ def generate_init_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
                 ck_state = (frame_idx // 8) % 2  # Toggle: 0,1,0,1,...
             else:
                 ck_state = clock_value
-            bits[19] = ck_state
+            bits[19] = 1 - ck_state
             
             # Rest are 0 (default)
             
@@ -214,7 +214,7 @@ def generate_pde_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
                 ck_state = (frame_idx // 2) % 2
             else:
                 ck_state = clock_value
-            bits[19] = ck_state
+            bits[19] = 1 - ck_state
             
             # Rest are 0 (default)
             
@@ -268,7 +268,7 @@ def generate_init_pdx_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
                 ck_state = (frame_idx // 8) % 2  # Toggle: 0,1,0,1,...
             else:
                 ck_state = clock_value
-            bits[19] = ck_state
+            bits[19] = 1 - ck_state
             
             # Rest are 0 (default)
             
@@ -484,7 +484,7 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
             bits[i] = 1
         for i in range(11, 19):  # C0~C7
             bits[i] = 1
-        bits[19] = ck_val  # HBM_CK
+        bits[19] = 1 - ck_val  # HBM_CK
         frame_int = 0
         for i, bit in enumerate(bits):
             frame_int |= (bit << i)
@@ -673,7 +673,7 @@ def test_ca_training():
             bits[j] = 1
         for j in range(11, 19):  # C0~C7
             bits[j] = 1
-        bits[19] = ck_state
+        bits[19] = 1 - ck_state
         frame_int = 0
         for j, bit in enumerate(bits):
             frame_int |= (bit << j)
