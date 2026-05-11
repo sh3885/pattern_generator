@@ -462,23 +462,21 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
     """
     Convert CA training pattern to SERDES 16:1 format.
     
-    Takes 16 frames of 28-bit data and converts to SERDES 16:1 output.
-    Pads with default values if pattern is not a multiple of 16 frames.
+    Takes 16 frames of 30-bit data and converts to SERDES 16:1 format.
+    The int value layout (bit-wise):
+    - bit 0-15: R0's 16-bit value (LSB position in final hex string)
+    - bit 16-31: R1's 16-bit value
+    - ...
+    - bit 464-479: reserved1's 16-bit value (MSB position in final hex string)
     
     Args:
         hex_pattern (str): Hex pattern (8 chars per frame)
-        padding_ck_toggle (bool): Whether to toggle HBM_CK for padding frames based on last frame's CK (default True)
-        padding_ck_value (int): Fixed HBM_CK value (0 or 1) for padding if not toggling (default 0)
+        padding_ck_toggle (bool): Whether to toggle HBM_CK for padding frames
+        padding_ck_value (int): Fixed HBM_CK value (0 or 1) for padding if not toggling
     
     Returns:
-        str: SERDES 16:1 hex pattern (128 chars per 16 frames)
+        str: SERDES 16:1 hex pattern (120 hex chars per 16 frames)
     """
-    BIT_NAMES = [
-        'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
-        'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
-        'HBM_CK', 'PC0_WDQS', 'PC1_WDQS', 'PC0_WTPH', 'PC1_WTPH', 'PC0_RTPH', 'PC1_RTPH', 'PC0_RD_EN', 'PC1_RD_EN', 'reserved0', 'reserved1'
-    ]
-    
     # Padding frame: R0~R10, C0~C7 = HIGH, CK = toggled, rest = LOW
     def create_padding_frame(ck_val):
         bits = [0] * 30
@@ -486,8 +484,7 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
             bits[i] = 1
         for i in range(11, 19):  # C0~C7
             bits[i] = 1
-        bits[19] = ck_val  # HBM_CK (already toggled from outside)
-        # bits[20:30] = 0 (WDQS, WTPH, RTPH, RD_EN, reserved all LOW) - default initialized to 0
+        bits[19] = ck_val  # HBM_CK
         frame_int = 0
         for i, bit in enumerate(bits):
             frame_int |= (bit << i)
@@ -517,30 +514,34 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
         frames.append(padding_frame)
         last_ck = ck_val
     
-    # Convert to SERDES 16:1 format (16 frames -> 1 output block)
-    serdes_pattern = ""
+    # Convert to SERDES 16:1 format (16 frames -> 1 output block = 480 bits = 120 hex chars)
+    serdes_blocks_list = []  # Collect blocks first
     for block_idx in range(len(frames) // 16):
         block_frames = frames[block_idx * 16:(block_idx + 1) * 16]
         
-        # Concatenate 16 frames of 30 bits = 480 bits = 120 hex chars
-        # Each 16-bit group is packed LSB-first across frames:
-        #   bit0 = frame0, bit1 = frame1, ..., bit15 = frame15.
+        # Build int with 480 bits (30 bits per position × 16 frames)
+        # bit 0-15: R0's 16-bit value (collected from 16 frames, LSB first)
+        # bit 16-31: R1's 16-bit value
+        # ...
+        # bit 464-479: reserved1's 16-bit value (MSB)
         combined_bits = 0
         bit_pos = 0
         
-        # For each bit position (0-29), collect 16 bits from 16 frames
-        for bit_idx in range(30):  # R0 to reserved1
-            for frame in block_frames:
-                bit = (frame >> bit_idx) & 1
+        for bit_idx in range(30):  # For each bit position (R0 ~ reserved1)
+            for frame_idx in range(16):  # For each of 16 frames
+                bit = (block_frames[frame_idx] >> bit_idx) & 1
                 combined_bits |= (bit << bit_pos)
                 bit_pos += 1
         
-        # Convert to hex (120 hex chars for 480 bits)
-        # Note: hex string is big-endian, so the low-order 16-bit word for each
-        # block appears in the final 4 hex chars of that 120-char block.
-        num_hex_chars = (bit_pos + 3) // 4
-        serdes_hex = f"{combined_bits:0{num_hex_chars}X}"
-        serdes_pattern += serdes_hex
+        # Convert to 120-char hex string
+        serdes_hex = f"{combined_bits:0120X}"
+        serdes_blocks_list.append(serdes_hex)
+    
+    # Reverse blocks so LSB block comes last in hex string
+    # Block 0 (bit 0-479) should be at the end (LSB)
+    # Block 2 (bit 960-1439) should be at the start (MSB)
+    serdes_blocks_list.reverse()
+    serdes_pattern = "".join(serdes_blocks_list)
     
     return serdes_pattern
 
@@ -548,39 +549,62 @@ def pattern_to_serdes_16to1(hex_pattern, padding_ck_toggle=True, padding_ck_valu
 def serdes_16to1_to_pattern(serdes_hex, num_frames=None):
     """
     Convert SERDES 16:1 hex output back into 30-bit frame hex strings.
-
+    
+    Reverses the pattern_to_serdes_16to1 encoding:
+    - Hex string's start (MSB) → Block N-1 (higher frame indices)
+    - Hex string's end (LSB) → Block 0 (lower frame indices, frames 0-15)
+    
     Args:
-        serdes_hex (str): SERDES 16:1 hex string
-        num_frames (int, optional): Number of frames to reconstruct. If omitted,
-            all frames in the SERDES string are decoded.
-
+        serdes_hex (str): SERDES 16:1 hex string (120 chars per 16 frames)
+        num_frames (int, optional): Number of frames to reconstruct.
+    
     Returns:
-        list[str]: Decoded frame hex strings.
+        list[str]: Decoded frame hex strings (8 chars per frame).
     """
     if len(serdes_hex) % 120 != 0:
-        raise ValueError("serdes_hex length must be a multiple of 120 hex chars (480 bits)")
-
+        raise ValueError("serdes_hex length must be a multiple of 120 hex chars (480 bits per block)")
+    
     num_blocks = len(serdes_hex) // 120
     total_frames = num_blocks * 16
     if num_frames is None:
         num_frames = total_frames
     elif num_frames > total_frames:
         raise ValueError(f"num_frames ({num_frames}) exceeds decoded frame count ({total_frames})")
-
+    
     frames = []
-    for block_idx in range(num_blocks):
-        block_hex = serdes_hex[block_idx * 120:(block_idx + 1) * 120]
+    
+    # Blocks are reversed in hex string (Block 0 at end = LSB)
+    # So we need to process from the end
+    for block_idx_in_hex in range(num_blocks):
+        # Map hex position to frame block position (reversed)
+        block_idx_in_frames = num_blocks - 1 - block_idx_in_hex
+        
+        # Extract block from hex string
+        block_hex = serdes_hex[block_idx_in_hex * 120:(block_idx_in_hex + 1) * 120]
         block_int = int(block_hex, 16)
-
-        for frame_in_block in range(16):
+        
+        # Extract 16 frames from the 480-bit int
+        for frame_idx_in_block in range(16):
             frame_value = 0
+            
+            # Reconstruct each of 30 bits for this frame
             for bit_idx in range(30):
-                bit_pos = bit_idx * 16 + frame_in_block
-                bit = (block_int >> bit_pos) & 1
+                # Calculate bit position in the int:
+                # bit_idx 0 (R0): bits 0-15 in int (frame 0-15 values)
+                # For frame_idx_in_block, the bit within its 16-bit group is at offset frame_idx_in_block
+                bit_pos_in_int = bit_idx * 16 + frame_idx_in_block
+                bit = (block_int >> bit_pos_in_int) & 1
                 frame_value |= (bit << bit_idx)
-            frames.append(f"{frame_value:08X}")
-
-    return frames[:num_frames]
+            
+            # Add frame at correct position
+            frame_global_idx = block_idx_in_frames * 16 + frame_idx_in_block
+            frames.append((frame_global_idx, f"{frame_value:08X}"))
+    
+    # Sort by frame index and extract hex strings
+    frames.sort(key=lambda x: x[0])
+    result = [hex_str for _, hex_str in frames]
+    
+    return result[:num_frames]
 
 
 def test_ca_training():

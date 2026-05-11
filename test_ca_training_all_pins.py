@@ -1,4 +1,4 @@
-import generate_pattern
+﻿import generate_pattern
 import analyze_serdes_16bit
 generate_pattern.DEBUG_MODE = False
 
@@ -26,7 +26,6 @@ for pin in ca_pins:
     print('--- Analyze SERDES pattern for ' + pin + ' ---')
     analyze_serdes_16bit.analyze_serdes_pattern(serdes_pattern)
     print()
-
 ca_trn_pat_list = []
 ca_trn_misr_list = []
 
