@@ -352,7 +352,7 @@ def generate_nop_pattern(num_nops=1):
             bits = [0] * 30
             for i in range(10):
                 bits[i] = 1
-            bits[10] = 0
+            bits[10] = 1
             for i in range(11, 19):
                 bits[i] = 1
 
@@ -419,7 +419,11 @@ def generate_write_pattern(pc, sid0, sid1, ba0, ba1, ba2, ba3, ca0, ca1, ca2, ca
 
 
 def generate_pre_postamble_pattern(wck, pc0_wdqs_toggle=False, pc1_wdqs_toggle=False):
-    """Generate a pre/postamble pattern for WCK frames."""
+    """Generate a pre/postamble pattern for WCK frames.
+
+    WDQS toggles start at 1 and follow 101010... for the selected PC channel.
+    Clock always repeats 1100 for each frame.
+    """
     if wck < 1:
         return ''
 
@@ -429,9 +433,9 @@ def generate_pre_postamble_pattern(wck, pc0_wdqs_toggle=False, pc1_wdqs_toggle=F
         for i in range(19):
             bits[i] = 1
 
-        bits[19] = 0
-        bits[20] = (frame_idx % 2) if pc0_wdqs_toggle else 0
-        bits[21] = (frame_idx % 2) if pc1_wdqs_toggle else 0
+        bits[19] = 1 if (frame_idx % 4) < 2 else 0
+        bits[20] = (1 - (frame_idx % 2)) if pc0_wdqs_toggle else 0
+        bits[21] = (1 - (frame_idx % 2)) if pc1_wdqs_toggle else 0
 
         frame_int = 0
         for i, bit in enumerate(bits):
@@ -442,7 +446,11 @@ def generate_pre_postamble_pattern(wck, pc0_wdqs_toggle=False, pc1_wdqs_toggle=F
 
 
 def generate_tph_pattern(wck, pc0_wdqs_toggle=False, pc1_wdqs_toggle=False, tph_pattern='010'):
-    """Generate a TPH pattern for WCK frames."""
+    """Generate a TPH pattern for WCK frames.
+
+    WDQS toggles start at 1 and follow 101010... for the selected PC channel.
+    Clock always repeats 1100 for each frame.
+    """
     if pc0_wdqs_toggle and pc1_wdqs_toggle:
         raise ValueError('pc0 and pc1 cannot both be true')
     if wck < 1:
@@ -456,9 +464,9 @@ def generate_tph_pattern(wck, pc0_wdqs_toggle=False, pc1_wdqs_toggle=False, tph_
         for i in range(19):
             bits[i] = 1
 
-        bits[19] = 0
-        bits[20] = (frame_idx % 2) if pc0_wdqs_toggle else 0
-        bits[21] = (frame_idx % 2) if pc1_wdqs_toggle else 0
+        bits[19] = 1 if (frame_idx % 4) < 2 else 0
+        bits[20] = (1 - (frame_idx % 2)) if pc0_wdqs_toggle else 0
+        bits[21] = (1 - (frame_idx % 2)) if pc1_wdqs_toggle else 0
 
         if pc0_wdqs_toggle:
             bits[22] = tph_bits[frame_idx % len(tph_bits)]
