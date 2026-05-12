@@ -492,8 +492,21 @@ def extract_aword_input_words(hex_pattern):
 
     for clk in range(num_clocks):
         block = hex_pattern[clk * 32:(clk + 1) * 32]
-        low_frame = int(block[0:8], 16)
-        high_frame = int(block[16:24], 16)
+        frame0 = int(block[0:8], 16)
+        frame2 = int(block[16:24], 16)
+
+        ck0 = (frame0 >> 19) & 1
+        ck2 = (frame2 >> 19) & 1
+        if ck0 == 0 and ck2 == 1:
+            low_frame = frame0
+            high_frame = frame2
+        elif ck0 == 1 and ck2 == 0:
+            low_frame = frame2
+            high_frame = frame0
+        else:
+            raise ValueError(
+                f"Unexpected CK polarity in block {clk}: frame0 CK={ck0}, frame2 CK={ck2}"
+            )
 
         low_bits = [(low_frame >> i) & 1 for i in range(28)]
         high_bits = [(high_frame >> i) & 1 for i in range(28)]
