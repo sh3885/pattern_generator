@@ -10,18 +10,26 @@ def format_frame_log(frame_hex, frame_idx):
     frame_int = int(frame_hex, 16)
     bits_str = bin(frame_int)[2:].zfill(30)
     bits = [(frame_int >> i) & 1 for i in range(30)]
+    
+    # R0-R10
+    r_bits = ''.join(str(bits[i]) for i in range(11))
+    # C0-C7
+    c_bits = ''.join(str(bits[i]) for i in range(11, 19))
+    
     return (
         f"Frame {frame_idx:2d}: {frame_hex} | {bits_str} | "
-        f"CK={bits[19]} WDQS={bits[20]} WTPH={bits[22]} RTPH={bits[24]} RDEN={bits[26]} "
-        f"R0={bits[0]} R1={bits[1]} R2={bits[2]} R3={bits[3]} "
-        f"C0={bits[11]} C1={bits[12]} C2={bits[13]} C3={bits[14]}"
+        f"CK={bits[19]} WDQS={bits[20]} WTPH={bits[22]} RTPH={bits[24]} RDEN={bits[26]} | "
+        f"R[{r_bits}] C[{c_bits}]"
     )
 
 
-def log_pattern(name, pattern):
+def log_pattern(name, pattern, **kwargs):
     lines = []
     num_frames = len(pattern) // 8
     lines.append(f"=== {name} ({num_frames} frames) ===")
+    if kwargs:
+        args_str = ', '.join(f"{k}={v}" for k, v in kwargs.items())
+        lines.append(f"Arguments: {args_str}")
     lines.append(f"pattern length: {len(pattern)} hex chars")
     lines.append(f"pattern: {pattern}")
     for idx in range(num_frames):
@@ -50,12 +58,14 @@ def main():
     )
     assert len(mrs) == 32
     assert_ck_sequence(mrs, [1, 1, 0, 0])
-    sections += log_pattern('MRS Pattern', mrs)
+    sections += log_pattern('MRS Pattern', mrs,
+                           op0=1, op1=1, op2=0, op3=0, op4=1, op5=0, op6=1, op7=0,
+                           ma0=1, ma1=0, ma2=1, ma3=0, ma4=1)
 
     nop = generate_pattern.generate_nop_pattern(2)
     assert len(nop) == 64
     assert_ck_sequence(nop, [1, 1, 0, 0] * 2)
-    sections += log_pattern('NOP Pattern x2', nop)
+    sections += log_pattern('NOP Pattern x2', nop, num_nops=2)
 
     wr = generate_pattern.generate_write_pattern(
         pc=1,
@@ -65,15 +75,20 @@ def main():
     )
     assert len(wr) == 32
     assert_ck_sequence(wr, [1, 1, 0, 0])
-    sections += log_pattern('WR Pattern', wr)
+    sections += log_pattern('WR Pattern', wr,
+                           pc=1, sid0=1, sid1=0,
+                           ba0=0, ba1=1, ba2=1, ba3=0,
+                           ca0=1, ca1=0, ca2=1, ca3=0, ca4=1)
 
     pre = generate_pattern.generate_pre_postamble_pattern(5, pc0_wdqs_toggle=True, pc1_wdqs_toggle=False)
     assert len(pre) == 40
-    sections += log_pattern('Pre/Postamble Pattern', pre)
+    sections += log_pattern('Pre/Postamble Pattern', pre,
+                           wck=5, pc0_wdqs_toggle=True, pc1_wdqs_toggle=False)
 
     tph = generate_pattern.generate_tph_pattern(8, pc0_wdqs_toggle=True, pc1_wdqs_toggle=False, tph_pattern='010')
     assert len(tph) == 64
-    sections += log_pattern('TPH Pattern', tph)
+    sections += log_pattern('TPH Pattern', tph,
+                           wck=8, pc0_wdqs_toggle=True, pc1_wdqs_toggle=False, tph_pattern='010')
 
     with open(LOG_FILE, 'w') as f:
         f.write('\n'.join(sections))
