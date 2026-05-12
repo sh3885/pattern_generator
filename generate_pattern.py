@@ -4,6 +4,19 @@ DRAM HBM4 Pattern Generator
 
 DEBUG_MODE = True  # Global debug flag
 
+
+def _parse_bit_sequence(value, length, name):
+    if isinstance(value, str):
+        if len(value) != length or not set(value).issubset({'0', '1'}):
+            raise ValueError(f"{name} must be a {length}-bit string of '0'/'1'")
+        return [int(bit) for bit in value]
+    if isinstance(value, list):
+        if len(value) != length:
+            raise ValueError(f"{name} list must have length {length}")
+        return [int(bit) for bit in value]
+    raise ValueError(f"{name} must be a bit string or bit list")
+
+
 def generate_ca_training_pattern(target_ca, training_value, clock_toggle=True, num_frames=1):
     """
     Generate CA training pattern (hex string).
@@ -287,14 +300,184 @@ def generate_init_pdx_pattern(num_clocks=1, clock_toggle=True, clock_value=0):
     return pattern_hex
 
 
-def generate_init_mrs_pattern():
-    """
-    Generate MRS initialization pattern (hex string).
-    
-    TBD
-    """
-    # TBD
-    pass
+def generate_mrs_pattern(op0, op1, op2, op3, op4, op5, op6, op7, ma0, ma1, ma2, ma3, ma4):
+    """Generate a 4-frame MRS pattern."""
+    op_bits = [int(op0), int(op1), int(op2), int(op3), int(op4), int(op5), int(op6), int(op7)]
+    ma_bits = [int(ma0), int(ma1), int(ma2), int(ma3), int(ma4)]
+
+    pattern_hex = ''
+    for frame_idx in range(4):
+        bits = [0] * 30
+        for i in range(11):
+            bits[i] = 1
+
+        if frame_idx < 2:
+            bits[11] = 0
+            bits[12] = 0
+            bits[13] = 0
+            bits[14] = ma_bits[4]
+            bits[15] = op_bits[5]
+            bits[16] = op_bits[6]
+            bits[17] = op_bits[7]
+            bits[18] = ma_bits[0]
+        else:
+            bits[11] = ma_bits[1]
+            bits[12] = ma_bits[2]
+            bits[13] = ma_bits[3]
+            bits[14] = op_bits[0]
+            bits[15] = op_bits[1]
+            bits[16] = op_bits[2]
+            bits[17] = op_bits[3]
+            bits[18] = op_bits[4]
+
+        ck_state = (frame_idx // 2) % 2
+        bits[19] = 1 - ck_state
+
+        frame_int = 0
+        for i, bit in enumerate(bits):
+            frame_int |= (bit << i)
+        pattern_hex += f"{frame_int:08X}"
+
+    return pattern_hex
+
+
+def generate_nop_pattern(num_nops=1):
+    """Generate repeated 4-frame NOP patterns."""
+    if num_nops < 1:
+        return ''
+
+    pattern_hex = ''
+    for _ in range(num_nops):
+        for frame_idx in range(4):
+            bits = [0] * 30
+            for i in range(10):
+                bits[i] = 1
+            bits[10] = 0
+            for i in range(11, 19):
+                bits[i] = 1
+
+            ck_state = (frame_idx // 2) % 2
+            bits[19] = 1 - ck_state
+
+            frame_int = 0
+            for i, bit in enumerate(bits):
+                frame_int |= (bit << i)
+            pattern_hex += f"{frame_int:08X}"
+
+    return pattern_hex
+
+
+def generate_write_pattern(pc, sid0, sid1, ba0, ba1, ba2, ba3, ca0, ca1, ca2, ca3, ca4):
+    """Generate a 4-frame WR pattern."""
+    pc = int(pc) & 1
+    sid0 = int(sid0)
+    sid1 = int(sid1)
+    ba0 = int(ba0)
+    ba1 = int(ba1)
+    ba2 = int(ba2)
+    ba3 = int(ba3)
+    ca0 = int(ca0)
+    ca1 = int(ca1)
+    ca2 = int(ca2)
+    ca3 = int(ca3)
+    ca4 = int(ca4)
+
+    pattern_hex = ''
+    for frame_idx in range(4):
+        bits = [0] * 30
+        for i in range(11):
+            bits[i] = 1
+
+        if frame_idx < 2:
+            bits[11] = 1
+            bits[12] = 0
+            bits[13] = 0
+            bits[14] = 0
+            bits[15] = pc
+            bits[16] = sid0
+            bits[17] = sid1
+            bits[18] = ba0
+        else:
+            bits[11] = ba1
+            bits[12] = ba2
+            bits[13] = ba3
+            bits[14] = ca0
+            bits[15] = ca1
+            bits[16] = ca2
+            bits[17] = ca3
+            bits[18] = ca4
+
+        ck_state = (frame_idx // 2) % 2
+        bits[19] = 1 - ck_state
+
+        frame_int = 0
+        for i, bit in enumerate(bits):
+            frame_int |= (bit << i)
+        pattern_hex += f"{frame_int:08X}"
+
+    return pattern_hex
+
+
+def generate_pre_postamble_pattern(wck, pc0_wdqs_toggle=False, pc1_wdqs_toggle=False):
+    """Generate a pre/postamble pattern for WCK frames."""
+    if wck < 1:
+        return ''
+
+    pattern_hex = ''
+    for frame_idx in range(wck):
+        bits = [0] * 30
+        for i in range(19):
+            bits[i] = 1
+
+        bits[19] = 0
+        bits[20] = (frame_idx % 2) if pc0_wdqs_toggle else 0
+        bits[21] = (frame_idx % 2) if pc1_wdqs_toggle else 0
+
+        frame_int = 0
+        for i, bit in enumerate(bits):
+            frame_int |= (bit << i)
+        pattern_hex += f"{frame_int:08X}"
+
+    return pattern_hex
+
+
+def generate_tph_pattern(wck, pc0_wdqs_toggle=False, pc1_wdqs_toggle=False, tph_pattern='010'):
+    """Generate a TPH pattern for WCK frames."""
+    if pc0_wdqs_toggle and pc1_wdqs_toggle:
+        raise ValueError('pc0 and pc1 cannot both be true')
+    if wck < 1:
+        return ''
+
+    tph_bits = _parse_bit_sequence(tph_pattern, len(tph_pattern), 'TPH')
+    pattern_hex = ''
+
+    for frame_idx in range(wck):
+        bits = [0] * 30
+        for i in range(19):
+            bits[i] = 1
+
+        bits[19] = 0
+        bits[20] = (frame_idx % 2) if pc0_wdqs_toggle else 0
+        bits[21] = (frame_idx % 2) if pc1_wdqs_toggle else 0
+
+        if pc0_wdqs_toggle:
+            bits[22] = tph_bits[frame_idx % len(tph_bits)]
+        elif pc1_wdqs_toggle:
+            bits[23] = tph_bits[frame_idx % len(tph_bits)]
+
+        frame_int = 0
+        for i, bit in enumerate(bits):
+            frame_int |= (bit << i)
+        pattern_hex += f"{frame_int:08X}"
+
+    return pattern_hex
+
+
+def generate_init_mrs_pattern(op0=0, op1=0, op2=0, op3=0, op4=0, op5=0, op6=0, op7=0,
+                              ma0=0, ma1=0, ma2=0, ma3=0, ma4=0):
+    """Generate a default MRS pattern using OP/MA bits."""
+    return generate_mrs_pattern(op0, op1, op2, op3, op4, op5, op6, op7,
+                                 ma0, ma1, ma2, ma3, ma4)
 
 
 def extract_aword_input_words(hex_pattern):

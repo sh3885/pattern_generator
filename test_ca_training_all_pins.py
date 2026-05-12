@@ -5,10 +5,10 @@ generate_pattern.DEBUG_MODE = False
 ca_pins = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']
 
 for pin in ca_pins:
-    training = generate_pattern.generate_ca_training_pattern(pin, '00111100', clock_toggle=True, num_frames=48)
+    training = generate_pattern.generate_ca_training_pattern(pin, '11000011', clock_toggle=True, num_frames=48)
     pattern = training
     raw_frames = len(pattern) // 8
-    print(f'=== {pin} Training with sequence "00111100" ===')
+    print(f'=== {pin} Training with sequence "11000011" ===')
     print(f'Raw pattern: {raw_frames} frames (4 default + 44 training)')
     print('Hex Pattern: ' + pattern)
     steps = generate_pattern.get_aword_misr_steps(pattern[32:])  # Exclude first 4 frames for MISR
@@ -30,7 +30,7 @@ ca_trn_pat_list = []
 ca_trn_misr_list = []
 
 for pin in ca_pins:
-    training = generate_pattern.generate_ca_training_pattern(pin, '00111100', clock_toggle=True, num_frames=48)
+    training = generate_pattern.generate_ca_training_pattern(pin, '11000011', clock_toggle=True, num_frames=48)
     serdes_pattern = generate_pattern.pattern_to_serdes_16to1(training, padding_ck_toggle=True, padding_ck_value=0)
     ca_trn_pat_list.append(f"0x{serdes_pattern.upper()}")
     

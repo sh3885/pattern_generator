@@ -4,7 +4,6 @@ Generate CA training and initialization patterns for HBM testing.
 Creates ptn_ca.txt and ptn_init.txt files.
 """
 
-import os
 import generate_pattern
 import analyze_serdes_16bit
 
@@ -21,11 +20,11 @@ def generate_ca_patterns():
     logs = []
 
     for pin in ca_pins:
-        training = generate_pattern.generate_ca_training_pattern(pin, '00111100', clock_toggle=True, num_frames=48)
+        training = generate_pattern.generate_ca_training_pattern(pin, '11000011', clock_toggle=True, num_frames=48)
         pattern = training
         raw_frames = len(pattern) // 8
         
-        logs.append(f'=== {pin} Training with sequence "00111100" ===')
+        logs.append(f'=== {pin} Training with sequence "11000011" ===')
         logs.append(f'Raw pattern: {raw_frames} frames (4 default + 44 training)')
         logs.append('Hex Pattern: ' + pattern)
         
@@ -76,11 +75,6 @@ def generate_init_patterns():
 
 def create_ptn_ca_txt(ca_trn_pat_list, ca_trn_misr_list, logs):
     """Create ptn_ca.txt file."""
-    existing_content = ''
-    if os.path.exists('ptn_ca.txt'):
-        with open('ptn_ca.txt', 'r') as f:
-            existing_content = f.read().rstrip() + '\n'
-
     with open('ptn_ca.txt', 'w') as f:
         f.write('ca_trn_pat_list = [\n')
         for pat in ca_trn_pat_list:
@@ -95,27 +89,14 @@ def create_ptn_ca_txt(ca_trn_pat_list, ca_trn_misr_list, logs):
         for log in logs:
             f.write(log + '\n')
 
-        if existing_content:
-            f.write('\n# Existing content preserved below\n')
-            f.write(existing_content)
-
 def create_ptn_init_txt(init_pattern, logs):
     """Create ptn_init.txt file."""
-    existing_content = ''
-    if os.path.exists('ptn_init.txt'):
-        with open('ptn_init.txt', 'r') as f:
-            existing_content = f.read().rstrip() + '\n'
-
     with open('ptn_init.txt', 'w') as f:
         f.write(f'init_pattern = "{init_pattern}"\n')
         
         f.write('\n# === Logs from test_init_pattern.py ===\n')
         for log in logs:
             f.write(log + '\n')
-
-        if existing_content:
-            f.write('\n# Existing content preserved below\n')
-            f.write(existing_content)
 
 if __name__ == "__main__":
     print("Generating CA training patterns...")

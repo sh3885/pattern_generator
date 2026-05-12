@@ -94,7 +94,7 @@ def generate_ca_training_patterns():
     ca_pins = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']
 
     for pin in ca_pins:
-        training = generate_pattern.generate_ca_training_pattern(pin, '00111100', clock_toggle=True, num_frames=48)
+        training = generate_pattern.generate_ca_training_pattern(pin, '11000011', clock_toggle=True, num_frames=48)
         patterns[f"ca_training_{pin}"] = training
         
         # Calculate MISR values
