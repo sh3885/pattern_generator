@@ -103,6 +103,48 @@ def generate_ca_training_patterns():
 
     return patterns, misr_list
 
+
+def generate_mrs_patterns():
+    """Generate fixed MRS patterns with NOP(7) appended."""
+    patterns = {}
+
+    mrs_definitions = [
+        ("mrs_MR1_Write_Latency_8",            [0, 0, 0, 1, 0, 0, 0, 0], [1, 0, 0, 0, 0]),
+        ("mrs_MR7_DWORD_Loopback_Enable",            [1, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 0, 0]),
+        ("mrs_MR7_DWORD_Loopback_Enable_MISR_Mode",  [1, 0, 0, 1, 1, 0, 0, 0], [1, 1, 1, 0, 0]),
+        ("mrs_MR7_DWORD_Loopback_Disable",           [0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 0, 0]),
+        ("mrs_MR8_WriteLeveling_Enable",            [0, 0, 0, 1, 0, 0, 0, 0], [0, 0, 0, 1, 0]),
+        ("mrs_MR8_WriteLeveling_Disable",           [0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0]),
+    ]
+
+    for name, op_bits, ma_bits in mrs_definitions:
+        mrs_pattern = generate_pattern.generate_mrs_pattern(*op_bits, *ma_bits)
+        patterns[name] = mrs_pattern + generate_pattern.generate_nop_pattern(7)
+
+    return patterns
+
+
+def generate_wr_patterns():
+    """Generate WR + NOP + Pre + TPH + Post patterns."""
+    patterns = {}
+
+    wr_pattern = generate_pattern.generate_write_pattern(
+        pc=1,
+        sid0=1, sid1=0,
+        ba0=0, ba1=1, ba2=1, ba3=0,
+        ca0=1, ca1=0, ca2=1, ca3=0, ca4=1
+    )
+    wr_pattern = (
+        wr_pattern
+        + generate_pattern.generate_nop_pattern(4)
+        + generate_pattern.generate_pre_postamble_pattern(4)
+        + generate_pattern.generate_tph_pattern(8, pc0_wdqs_toggle=True, tph_pattern='11')
+        + generate_pattern.generate_pre_postamble_pattern(4)
+    )
+    patterns["wr_pattern"] = wr_pattern
+    return patterns
+
+
 def generate_init_patterns():
     """
     Generate init patterns like in test_init_pattern.py
@@ -233,6 +275,16 @@ if __name__ == "__main__":
     # Write CA training patterns to separate file as a 2D array
     write_ca_training_h_file(ca_patterns, ca_misr_list, "pattern_ca_training.h", "PATTERN_CA_TRAINING_H", padding_ck_toggle=False, padding_ck_value=0)
     print("Wrote CA training patterns to pattern_ca_training.h")
+
+    # Generate and write MRS patterns
+    mrs_patterns = generate_mrs_patterns()
+    write_h_file(mrs_patterns, "pattern_mrs.h", "PATTERN_MRS_H")
+    print("Wrote MRS patterns to pattern_mrs.h")
+
+    # Generate and write WR patterns
+    wr_patterns = generate_wr_patterns()
+    write_h_file(wr_patterns, "pattern_wr.h", "PATTERN_WR_H")
+    print("Wrote WR patterns to pattern_wr.h")
 
     # Write init patterns to separate file
     write_h_file(init_patterns, "pattern_init.h", "PATTERN_INIT_H", padding_ck_toggle=True, padding_ck_value=0)

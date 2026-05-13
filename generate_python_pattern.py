@@ -4,6 +4,7 @@ Generate CA training and initialization patterns for HBM testing.
 Creates ptn_ca.txt and ptn_init.txt files.
 """
 
+import random
 import generate_pattern
 import analyze_serdes_16bit
 
@@ -98,6 +99,74 @@ def create_ptn_init_txt(init_pattern, logs):
         for log in logs:
             f.write(log + '\n')
 
+
+def generate_mrs_wr_patterns():
+    """Generate fixed MRS patterns and randomized WR pattern with SERDES output."""
+    logs = []
+    mrs_patterns = {}
+    mrs_serdes = {}
+
+    mrs_definitions = [
+        ("mrs_MR1_WriteLeveling_Stage8",            [0, 0, 0, 1, 0, 0, 0, 0], [1, 0, 0, 0, 0]),
+        ("mrs_MR7_DWORDLoopback_Enable",            [1, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 0, 0]),
+        ("mrs_MR7_DWORDLoopback_Enable_MISR_Mode",  [1, 0, 0, 1, 1, 0, 0, 0], [1, 1, 1, 0, 0]),
+        ("mrs_MR7_DWORDLoopback_Disable",           [0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 0, 0]),
+        ("mrs_MR8_WriteLeveling_Enable",            [0, 0, 0, 1, 0, 0, 0, 0], [0, 0, 0, 1, 0]),
+        ("mrs_MR8_WriteLeveling_Disable",           [0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0]),
+    ]
+
+    for name, op_bits, ma_bits in mrs_definitions:
+        mrs_pattern = generate_pattern.generate_mrs_pattern(*op_bits, *ma_bits)
+        mrs_pattern = mrs_pattern + generate_pattern.generate_nop_pattern(7)
+        mrs_patterns[name] = mrs_pattern
+        mrs_serdes[name] = generate_pattern.pattern_to_serdes_16to1(mrs_pattern)
+        logs.append(f"{name}: OP={''.join(str(bit) for bit in op_bits)}, MA={''.join(str(bit) for bit in ma_bits)}")
+        logs.append(f"{name} + NOP(7) SERDES: {mrs_serdes[name]}")
+
+    pc = random.randint(0, 1)
+    sid0 = random.randint(0, 1)
+    sid1 = random.randint(0, 1)
+    ba_bits = [random.randint(0, 1) for _ in range(4)]
+    ca_bits = [random.randint(0, 1) for _ in range(5)]
+    wr_pattern = generate_pattern.generate_write_pattern(
+        pc=pc,
+        sid0=sid0, sid1=sid1,
+        ba0=ba_bits[0], ba1=ba_bits[1], ba2=ba_bits[2], ba3=ba_bits[3],
+        ca0=ca_bits[0], ca1=ca_bits[1], ca2=ca_bits[2], ca3=ca_bits[3], ca4=ca_bits[4]
+    )
+    wr_pattern = (
+        wr_pattern
+        + generate_pattern.generate_nop_pattern(4)
+        + generate_pattern.generate_pre_postamble_pattern(4)
+        + generate_pattern.generate_tph_pattern(8, pc0_wdqs_toggle=True, tph_pattern='11')
+        + generate_pattern.generate_pre_postamble_pattern(4)
+    )
+    wr_pattern_serdes = generate_pattern.pattern_to_serdes_16to1(wr_pattern)
+    logs.append(f"WR bits: pc={pc}, sid0={sid0}, sid1={sid1}, BA={''.join(str(bit) for bit in ba_bits)}, CA={''.join(str(bit) for bit in ca_bits)}")
+    logs.append(f"WR composite SERDES: {wr_pattern_serdes}")
+
+    return mrs_patterns, mrs_serdes, wr_pattern, wr_pattern_serdes, logs
+
+
+def create_ptn_mrs_wr_txt(mrs_patterns, mrs_serdes, wr_pattern, wr_serdes, logs):
+    """Create ptn_mrs_wr.txt file."""
+    with open('ptn_mrs_wr.txt', 'w') as f:
+        f.write('mrs_patterns = {\n')
+        for name, pattern in mrs_patterns.items():
+            f.write(f'    "{name}": "{pattern}",\n')
+        f.write('}\n\n')
+
+        f.write('mrs_serdes = {\n')
+        for name, serdes in mrs_serdes.items():
+            f.write(f'    "{name}": "{serdes}",\n')
+        f.write('}\n\n')
+
+        f.write(f'wr_pattern = "{wr_pattern}"\n')
+        f.write(f'wr_serdes = "{wr_serdes}"\n\n')
+        f.write('# === Logs from MRS/WR generation ===\n')
+        for log in logs:
+            f.write(log + '\n')
+
 if __name__ == "__main__":
     print("Generating CA training patterns...")
     ca_trn_pat_list, ca_trn_misr_list, ca_logs = generate_ca_patterns()
@@ -111,6 +180,14 @@ if __name__ == "__main__":
     print("Creating ptn_init.txt...")
     create_ptn_init_txt(init_pattern, init_logs)
 
+    print("Generating MRS/WR patterns...")
+    mrs_patterns, mrs_serdes, wr_pattern, wr_serdes, mrs_wr_logs = generate_mrs_wr_patterns()
+
+    print("Creating ptn_mrs_wr.txt...")
+    create_ptn_mrs_wr_txt(mrs_patterns, mrs_serdes, wr_pattern, wr_serdes, mrs_wr_logs)
+
     print("Pattern generation completed!")
     print(f"CA patterns: {len(ca_trn_pat_list)} pins")
     print(f"Init pattern length: {len(init_pattern)} hex chars")
+    print(f"MRS patterns: {len(mrs_patterns)} entries")
+    print(f"WR pattern length: {len(wr_pattern)} hex chars")
