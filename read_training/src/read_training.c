@@ -24,36 +24,36 @@
  * 나중에 주석을 제거하려면 "KO_NOTE"로 검색하면 됩니다.
  */
 
-#define T07_CMD_CODE 0x93U
-#define T07_ACK_OK 0xF0U
-#define T07_ACK_TBL_ERR 0x51U
-#define T07_ACK_SEG_ERR 0x52U
+#define CMD_CODE 0x93U
+#define ACK_OK 0xF0U
+#define ACK_TBL_ERR 0x51U
+#define ACK_SEG_ERR 0x52U
 
-#ifndef T07_RESULT_READ_RETRY_COUNT
-#define T07_RESULT_READ_RETRY_COUNT 3U
+#ifndef RESULT_READ_RETRY_COUNT
+#define RESULT_READ_RETRY_COUNT 3U
 #endif
 
-#ifndef T07_ERROR_PACKET_SEQUENCE
-#define T07_ERROR_PACKET_SEQUENCE (-8)
+#ifndef TRAINING_ERROR_PACKET_SEQUENCE
+#define TRAINING_ERROR_PACKET_SEQUENCE (-8)
 #endif
 
-#ifndef T07_ERROR_LFSR_MISMATCH
-#define T07_ERROR_LFSR_MISMATCH (-9)
+#ifndef TRAINING_ERROR_LFSR_MISMATCH
+#define TRAINING_ERROR_LFSR_MISMATCH (-9)
 #endif
 
-#ifndef T07_ERROR_DELAY_APPLY
-#define T07_ERROR_DELAY_APPLY (-10)
+#ifndef TRAINING_ERROR_DELAY_APPLY
+#define TRAINING_ERROR_DELAY_APPLY (-10)
 #endif
 
-#ifndef T07_RESULT_CMD_ADDR
-#define T07_RESULT_CMD_ADDR ((uintptr_t)0U)
+#ifndef RESULT_CMD_ADDR
+#define RESULT_CMD_ADDR ((uintptr_t)0U)
 #endif
 
-#ifndef T07_RESULT_RSP_ADDR
-#define T07_RESULT_RSP_ADDR ((uintptr_t)0U)
+#ifndef RESULT_RSP_ADDR
+#define RESULT_RSP_ADDR ((uintptr_t)0U)
 #endif
 
-#if defined(T07_USE_NATIVE_XIL_IO)
+#if defined(USE_NATIVE_XIL_IO)
 #include "xil_io.h"
 
 /*
@@ -110,7 +110,7 @@ static void *g_t07_pass_zone_log_context = NULL;
  *
  * The LFSR sequence length is 6, so valid_rx[6] starts again from row 0.
  */
-const u8 expected_read_lfsr[T07_READ_LFSR_LENGTH][T07_READ_LFSR_DQ_GROUP_SIZE] = {
+const u8 expected_read_lfsr[READ_LFSR_LENGTH][READ_LFSR_DQ_GROUP_SIZE] = {
     {0x21U, 0x28U, 0x2FU, 0x36U, 0x3DU, 0x44U, 0x4BU, 0x52U},
     {0x52U, 0x59U, 0x60U, 0x67U, 0x6EU, 0x75U, 0x7CU, 0x83U},
     {0x83U, 0x8AU, 0x91U, 0x98U, 0x9FU, 0xA6U, 0xADU, 0xB4U},
@@ -184,7 +184,7 @@ RtStatus rt_trim_line(const char *line, char *out, size_t out_size, size_t *writ
 
 void t07_set_io(T07Out64Fn out64, T07In64Fn in64)
 {
-#if defined(T07_USE_NATIVE_XIL_IO)
+#if defined(USE_NATIVE_XIL_IO)
     /*
      * KO_NOTE:
      * Board build에서는 out64/in64를 NULL로 넘기면 native Xil_Out64/Xil_In64 wrapper를 씁니다.
@@ -196,7 +196,7 @@ void t07_set_io(T07Out64Fn out64, T07In64Fn in64)
     /*
      * KO_NOTE:
      * PC build에서는 native IO가 없으므로 NULL이면 "IO 미설정" 상태가 됩니다.
-     * 이 상태에서 t07_rsult_read()를 부르면 T07_ERROR_IO_NOT_CONFIGURED가 반환됩니다.
+     * 이 상태에서 t07_rsult_read()를 부르면 TRAINING_ERROR_IO_NOT_CONFIGURED가 반환됩니다.
      */
     g_t07_out64 = out64;
     g_t07_in64 = in64;
@@ -240,13 +240,13 @@ int t07_rsult_read(u8 mode,
     unsigned int attempt;
 
     if (p_pkt_cnt == NULL || p_seg_cnt == NULL || p_data == NULL) {
-        return T07_ERROR_INVALID_ARGUMENT;
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
     if (mode > 0x0FU || frame_num > 0x0FU) {
-        return T07_ERROR_INVALID_ARGUMENT;
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
     if (g_t07_out64 == NULL || g_t07_in64 == NULL) {
-        return T07_ERROR_IO_NOT_CONFIGURED;
+        return TRAINING_ERROR_IO_NOT_CONFIGURED;
     }
 
     /*
@@ -257,7 +257,7 @@ int t07_rsult_read(u8 mode,
      * [47:32] BRAM address
      * [31:00] reserved
      */
-    cmd = ((u64)T07_CMD_CODE << 56) |
+    cmd = ((u64)CMD_CODE << 56) |
           ((u64)mode << 52) |
           ((u64)frame_num << 48) |
           ((u64)bram_addr << 32);
@@ -272,45 +272,45 @@ int t07_rsult_read(u8 mode,
      * If the packet/segment sequence is wrong, send the command again and
      * retry the whole packet read.
      */
-    for (attempt = 0U; attempt < T07_RESULT_READ_RETRY_COUNT; ++attempt) {
+    for (attempt = 0U; attempt < RESULT_READ_RETRY_COUNT; ++attempt) {
         /*
          * KO_NOTE:
          * retry_data에 먼저 임시 저장합니다.
          * 중간에 packet sequence가 깨지면 이 attempt 전체를 버리고 다시 읽어야 하기 때문입니다.
          */
-        u32 retry_data[T07_RESULT_SEGMENT_COUNT];
+        u32 retry_data[RESULT_SEGMENT_COUNT];
         u8 last_pkt_cnt = 0U;
         u8 last_seg_cnt = 0U;
         int sequence_ok = 1;
         size_t i;
 
-        g_t07_out64(T07_RESULT_CMD_ADDR, cmd);
+        g_t07_out64(RESULT_CMD_ADDR, cmd);
 
-        for (i = 0U; i < T07_RESULT_SEGMENT_COUNT; ++i) {
+        for (i = 0U; i < RESULT_SEGMENT_COUNT; ++i) {
             /*
              * KO_NOTE:
              * rsp_raw 상위 byte에는 command/ack/pkt/segment 정보가 있고,
              * 하위 32-bit에는 실제 result table segment 하나가 들어 있습니다.
              */
-            u64 rsp_raw = g_t07_in64(T07_RESULT_RSP_ADDR);
+            u64 rsp_raw = g_t07_in64(RESULT_RSP_ADDR);
             u8 rsp_cmd = (u8)((rsp_raw >> 56) & 0xFFU);
             u8 ack = (u8)((rsp_raw >> 48) & 0xFFU);
             u8 pkt_cnt = (u8)((rsp_raw >> 40) & 0x0FU);
             u8 seg_cnt = (u8)((rsp_raw >> 32) & 0xFFU);
-            u8 expected_pkt_cnt = i == (T07_RESULT_SEGMENT_COUNT - 1U) ? 1U : 0U;
-            u8 expected_seg_cnt = i == (T07_RESULT_SEGMENT_COUNT - 1U) ? 0U : (u8)(i + 1U);
+            u8 expected_pkt_cnt = i == (RESULT_SEGMENT_COUNT - 1U) ? 1U : 0U;
+            u8 expected_seg_cnt = i == (RESULT_SEGMENT_COUNT - 1U) ? 0U : (u8)(i + 1U);
 
-            if (rsp_cmd != T07_CMD_CODE) {
-                return T07_ERROR_ACK;
+            if (rsp_cmd != CMD_CODE) {
+                return TRAINING_ERROR_ACK;
             }
-            if (ack == T07_ACK_TBL_ERR) {
-                return T07_ERROR_TABLE;
+            if (ack == ACK_TBL_ERR) {
+                return TRAINING_ERROR_TABLE;
             }
-            if (ack == T07_ACK_SEG_ERR) {
-                return T07_ERROR_SEGMENT;
+            if (ack == ACK_SEG_ERR) {
+                return TRAINING_ERROR_SEGMENT;
             }
-            if (ack != T07_ACK_OK) {
-                return T07_ERROR_ACK;
+            if (ack != ACK_OK) {
+                return TRAINING_ERROR_ACK;
             }
 
             /*
@@ -332,11 +332,11 @@ int t07_rsult_read(u8 mode,
             memcpy(p_data, retry_data, sizeof(retry_data));
             *p_pkt_cnt = last_pkt_cnt;
             *p_seg_cnt = last_seg_cnt;
-            return T07_OK;
+            return TRAINING_OK;
         }
     }
 
-    return T07_ERROR_PACKET_SEQUENCE;
+    return TRAINING_ERROR_PACKET_SEQUENCE;
 }
 
 /*
@@ -345,22 +345,22 @@ int t07_rsult_read(u8 mode,
  * read_en이 켜진 bit들만 모아서 valid_rx compact sample을 만듭니다.
  */
 int t07_read_training_results(u16 result_len,
-                              T07Pc pc,
+                              u8 pc,
                               T07ResultEntry *entries,
                               T07ValidRxEntry *valid_rx,
                               size_t valid_rx_capacity,
                               size_t *valid_rx_count)
 {
-    u8 working_rx[T07_RX_DQ_COUNT];
+    u8 working_rx[RX_DQ_COUNT];
     size_t produced = 0U;
     unsigned int bits_in_run = 0U;
     u16 result_index;
 
     if ((result_len > 0U && entries == NULL) || valid_rx_count == NULL) {
-        return T07_ERROR_INVALID_ARGUMENT;
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
-    if (pc != T07_PC0 && pc != T07_PC1) {
-        return T07_ERROR_INVALID_ARGUMENT;
+    if (pc != PC0 && pc != PC1) {
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
 
     memset(working_rx, 0, sizeof(working_rx));
@@ -376,8 +376,8 @@ int t07_read_training_results(u16 result_len,
          * raw_segments는 HW에서 온 원본 20개 32-bit word입니다.
          * bytes는 그 word를 little-endian table byte 순서로 펼친 임시 buffer입니다.
          */
-        u32 raw_segments[T07_RESULT_SEGMENT_COUNT];
-        u8 bytes[T07_RESULT_SEGMENT_COUNT * 4U];
+        u32 raw_segments[RESULT_SEGMENT_COUNT];
+        u8 bytes[RESULT_SEGMENT_COUNT * 4U];
         u8 pkt_cnt = 0U;
         u8 seg_cnt = 0U;
         u8 read_en;
@@ -385,13 +385,13 @@ int t07_read_training_results(u16 result_len,
         unsigned int bit_step;
         int status;
 
-        status = t07_rsult_read(T07_MODE_READ,
-                                T07_RESULT_FRAME_NUM,
+        status = t07_rsult_read(MODE_READ,
+                                RESULT_FRAME_NUM,
                                 result_index,
                                 &pkt_cnt,
                                 &seg_cnt,
                                 raw_segments);
-        if (status != T07_OK) {
+        if (status != TRAINING_OK) {
             return status;
         }
 
@@ -408,7 +408,7 @@ int t07_read_training_results(u16 result_len,
          * This matches the hardware table order when byte 0 is carried in
          * the 32-bit segment LSB.
          */
-        for (i = 0U; i < T07_RESULT_SEGMENT_COUNT; ++i) {
+        for (i = 0U; i < RESULT_SEGMENT_COUNT; ++i) {
             bytes[(i * 4U) + 0U] = (u8)(raw_segments[i] & 0xFFU);
             bytes[(i * 4U) + 1U] = (u8)((raw_segments[i] >> 8) & 0xFFU);
             bytes[(i * 4U) + 2U] = (u8)((raw_segments[i] >> 16) & 0xFFU);
@@ -450,7 +450,7 @@ int t07_read_training_results(u16 result_len,
                &bytes[13U],
                sizeof(entries[result_index].rx_dq));
 
-        read_en = pc == T07_PC0 ?
+        read_en = pc == PC0 ?
                   entries[result_index].read_en_pc0 :
                   entries[result_index].read_en_pc1;
 
@@ -476,7 +476,7 @@ int t07_read_training_results(u16 result_len,
                     memset(working_rx, 0, sizeof(working_rx));
                 }
 
-                for (dq = 0U; dq < T07_RX_DQ_COUNT; ++dq) {
+                for (dq = 0U; dq < RX_DQ_COUNT; ++dq) {
                     /*
                      * KO_NOTE:
                      * result table의 rx_dq[dq] 안에는 bit0..bit7이 시간 순서로 들어 있습니다.
@@ -492,7 +492,7 @@ int t07_read_training_results(u16 result_len,
                     if (valid_rx != NULL) {
                         if (produced >= valid_rx_capacity) {
                             *valid_rx_count = produced;
-                            return T07_ERROR_BUFFER_TOO_SMALL;
+                            return TRAINING_ERROR_BUFFER_TOO_SMALL;
                         }
                         memcpy(valid_rx[produced].rx_dq,
                                working_rx,
@@ -508,49 +508,49 @@ int t07_read_training_results(u16 result_len,
                  * 중간에 read_en이 꺼지면 sample이 반쪽짜리가 되므로 에러 처리합니다.
                  */
                 *valid_rx_count = produced;
-                return T07_ERROR_READ_ENABLE;
+                return TRAINING_ERROR_READ_ENABLE;
             }
         }
     }
 
     if (bits_in_run != 0U) {
         *valid_rx_count = produced;
-        return T07_ERROR_READ_ENABLE;
+        return TRAINING_ERROR_READ_ENABLE;
     }
 
     *valid_rx_count = produced;
-    return T07_OK;
+    return TRAINING_OK;
 }
 
-static int t07_dq_to_local(T07Pc pc, u8 dq, size_t *pc_index, size_t *local_dq)
+static int t07_dq_to_local(u8 pc, u8 dq, size_t *pc_index, size_t *local_dq)
 {
     /*
      * KO_NOTE:
      * 외부에서는 PC0 dq0..31, PC1 dq32..63처럼 global DQ 번호를 씁니다.
      * T07PassData 내부 배열은 PC별 local_dq 0..31로 저장하므로 여기서 변환합니다.
      */
-    if (pc == T07_PC0) {
-        if (dq >= T07_DQ_PER_PC) {
-            return T07_ERROR_INVALID_ARGUMENT;
+    if (pc == PC0) {
+        if (dq >= DQ_PER_PC) {
+            return TRAINING_ERROR_INVALID_ARGUMENT;
         }
         *pc_index = 0U;
         *local_dq = (size_t)dq;
-        return T07_OK;
+        return TRAINING_OK;
     }
-    if (pc == T07_PC1) {
-        if (dq < T07_DQ_PER_PC || dq >= T07_RX_DQ_COUNT) {
-            return T07_ERROR_INVALID_ARGUMENT;
+    if (pc == PC1) {
+        if (dq < DQ_PER_PC || dq >= RX_DQ_COUNT) {
+            return TRAINING_ERROR_INVALID_ARGUMENT;
         }
         *pc_index = 1U;
-        *local_dq = (size_t)(dq - T07_DQ_PER_PC);
-        return T07_OK;
+        *local_dq = (size_t)(dq - DQ_PER_PC);
+        return TRAINING_OK;
     }
 
-    return T07_ERROR_INVALID_ARGUMENT;
+    return TRAINING_ERROR_INVALID_ARGUMENT;
 }
 
 static int t07_add_pass_zone(T07PassData *pass_data,
-                             T07Pc pc,
+                             u8 pc,
                              u8 dq,
                              u8 mck_dly,
                              u8 bit_dly,
@@ -570,18 +570,18 @@ static int t07_add_pass_zone(T07PassData *pass_data,
     int status;
 
     if (pass_data == NULL) {
-        return T07_ERROR_INVALID_ARGUMENT;
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
-    if (mck_dly >= T07_MCK_DLY_COUNT ||
-        bit_dly >= T07_BIT_DLY_COUNT ||
-        pe_start >= T07_PE_DLY_COUNT ||
-        pe_end >= T07_PE_DLY_COUNT ||
+    if (mck_dly >= MCK_DLY_COUNT ||
+        bit_dly >= BIT_DLY_COUNT ||
+        pe_start >= PE_DLY_COUNT ||
+        pe_end >= PE_DLY_COUNT ||
         pe_end < pe_start) {
-        return T07_ERROR_INVALID_ARGUMENT;
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
 
     status = t07_dq_to_local(pc, dq, &pc_index, &local_dq);
-    if (status != T07_OK) {
+    if (status != TRAINING_OK) {
         return status;
     }
 
@@ -598,7 +598,7 @@ static int t07_add_pass_zone(T07PassData *pass_data,
      * zones[][][]는 디버그/조회용 보관소입니다.
      * 꽉 차면 더 이상 저장하지 않지만, 아래 log callback과 best_center 갱신은 계속 진행합니다.
      */
-    if (pass_data->zone_count[pc_index][local_dq] < T07_MAX_PASS_ZONES_PER_DQ) {
+    if (pass_data->zone_count[pc_index][local_dq] < MAX_PASS_ZONES_PER_DQ) {
         u8 zone_index = pass_data->zone_count[pc_index][local_dq];
 
         pass_data->zones[pc_index][local_dq][zone_index] = zone;
@@ -632,7 +632,7 @@ static int t07_add_pass_zone(T07PassData *pass_data,
         best->pe_count = zone.pe_count;
         best->pe_dly = (u16)(zone.pe_start + (zone.pe_count / 2U));
     }
-    return T07_OK;
+    return TRAINING_OK;
 }
 
 int t07_check_dq_lfsr(const T07ValidRxEntry *valid_rx,
@@ -648,15 +648,15 @@ int t07_check_dq_lfsr(const T07ValidRxEntry *valid_rx,
     size_t sample;
 
     if (valid_rx_count > 0U && valid_rx == NULL) {
-        return T07_ERROR_INVALID_ARGUMENT;
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
-    if (dq >= T07_RX_DQ_COUNT) {
-        return T07_ERROR_INVALID_ARGUMENT;
+    if (dq >= RX_DQ_COUNT) {
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
 
     for (sample = 0U; sample < valid_rx_count; ++sample) {
-        size_t lfsr_index = sample % T07_READ_LFSR_LENGTH;
-        u8 expected = expected_read_lfsr[lfsr_index][dq % T07_READ_LFSR_DQ_GROUP_SIZE];
+        size_t lfsr_index = sample % READ_LFSR_LENGTH;
+        u8 expected = expected_read_lfsr[lfsr_index][dq % READ_LFSR_DQ_GROUP_SIZE];
 
         /*
          * KO_NOTE:
@@ -667,14 +667,14 @@ int t07_check_dq_lfsr(const T07ValidRxEntry *valid_rx,
             if (failed_sample != NULL) {
                 *failed_sample = sample;
             }
-            return T07_ERROR_LFSR_MISMATCH;
+            return TRAINING_ERROR_LFSR_MISMATCH;
         }
     }
 
     if (failed_sample != NULL) {
         *failed_sample = valid_rx_count;
     }
-    return T07_OK;
+    return TRAINING_OK;
 }
 
 int t07_check_valid_rx_lfsr(const T07ValidRxEntry *valid_rx,
@@ -690,17 +690,17 @@ int t07_check_valid_rx_lfsr(const T07ValidRxEntry *valid_rx,
     size_t dq;
 
     if (valid_rx_count > 0U && valid_rx == NULL) {
-        return T07_ERROR_INVALID_ARGUMENT;
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
 
-    for (dq = 0U; dq < T07_RX_DQ_COUNT; ++dq) {
+    for (dq = 0U; dq < RX_DQ_COUNT; ++dq) {
         size_t failed_at_sample = valid_rx_count;
         int status = t07_check_dq_lfsr(valid_rx,
                                        valid_rx_count,
                                        (u8)dq,
                                        &failed_at_sample);
 
-        if (status != T07_OK) {
+        if (status != TRAINING_OK) {
             if (failed_sample != NULL) {
                 *failed_sample = failed_at_sample;
             }
@@ -715,13 +715,13 @@ int t07_check_valid_rx_lfsr(const T07ValidRxEntry *valid_rx,
         *failed_sample = valid_rx_count;
     }
     if (failed_dq != NULL) {
-        *failed_dq = T07_RX_DQ_COUNT;
+        *failed_dq = RX_DQ_COUNT;
     }
-    return T07_OK;
+    return TRAINING_OK;
 }
 
 int t07_get_pass(const T07PassData *pass_data,
-                 T07Pc pc,
+                 u8 pc,
                  u8 dq,
                  u8 mck_dly,
                  u8 bit_dly,
@@ -740,12 +740,12 @@ int t07_get_pass(const T07PassData *pass_data,
     if (pass_data == NULL) {
         return 0;
     }
-    if (mck_dly >= T07_MCK_DLY_COUNT ||
-        bit_dly >= T07_BIT_DLY_COUNT ||
-        pe_dly >= T07_PE_DLY_COUNT) {
+    if (mck_dly >= MCK_DLY_COUNT ||
+        bit_dly >= BIT_DLY_COUNT ||
+        pe_dly >= PE_DLY_COUNT) {
         return 0;
     }
-    if (t07_dq_to_local(pc, dq, &pc_index, &local_dq) != T07_OK) {
+    if (t07_dq_to_local(pc, dq, &pc_index, &local_dq) != TRAINING_OK) {
         return 0;
     }
 
@@ -766,7 +766,7 @@ int t07_get_pass(const T07PassData *pass_data,
 }
 
 size_t t07_collect_pass_zones(const T07PassData *pass_data,
-                              T07Pc pc,
+                              u8 pc,
                               u8 dq,
                               T07PassZone *zones,
                               size_t zone_capacity)
@@ -784,7 +784,7 @@ size_t t07_collect_pass_zones(const T07PassData *pass_data,
     if (pass_data == NULL) {
         return 0U;
     }
-    if (t07_dq_to_local(pc, dq, &pc_index, &local_dq) != T07_OK) {
+    if (t07_dq_to_local(pc, dq, &pc_index, &local_dq) != TRAINING_OK) {
         return 0U;
     }
 
@@ -803,7 +803,7 @@ int t07_run_read_training_sweep(u16 result_len,
                                 T07ValidRxEntry *valid_rx,
                                 size_t valid_rx_capacity,
                                 T07PassData *pass_data,
-                                T07PassCenter centers[T07_PC_COUNT][T07_DQ_PER_PC])
+                                T07PassCenter centers[PC_COUNT][DQ_PER_PC])
 {
     /*
      * KO_NOTE:
@@ -816,11 +816,11 @@ int t07_run_read_training_sweep(u16 result_len,
         entries == NULL ||
         valid_rx == NULL ||
         pass_data == NULL ||
-        valid_rx_capacity < T07_READ_LFSR_LENGTH) {
-        return T07_ERROR_INVALID_ARGUMENT;
+        valid_rx_capacity < READ_LFSR_LENGTH) {
+        return TRAINING_ERROR_INVALID_ARGUMENT;
     }
     if (g_t07_apply_delay == NULL) {
-        return T07_ERROR_IO_NOT_CONFIGURED;
+        return TRAINING_ERROR_IO_NOT_CONFIGURED;
     }
 
     memset(pass_data, 0, sizeof(*pass_data));
@@ -830,28 +830,28 @@ int t07_run_read_training_sweep(u16 result_len,
      *   cur_pc    : 0..1
      *   i_mck_dly : 0..15
      *   i_bit_dly : 0..7
-     *   i_pe_dly  : 0..(T07_PE_DLY_COUNT - 1)
+     *   i_pe_dly  : 0..(PE_DLY_COUNT - 1)
      *
      * For each delay point, set every DQ in the current PC to that delay,
      * read result data once, then judge each DQ in that PC independently.
      * Only pass zones are stored, so pass_data memory does not grow with
-     * T07_PE_DLY_COUNT.
+     * PE_DLY_COUNT.
      */
-    for (pc_index = 0U; pc_index < T07_PC_COUNT; ++pc_index) {
+    for (pc_index = 0U; pc_index < PC_COUNT; ++pc_index) {
         /*
          * KO_NOTE:
          * PC0은 global dq0..31, PC1은 global dq32..63을 담당합니다.
          * dq_begin/dq_end를 잡아두면 아래 loop는 두 PC를 같은 코드로 처리할 수 있습니다.
          */
-        T07Pc pc = pc_index == 0U ? T07_PC0 : T07_PC1;
-        u8 dq_begin = pc == T07_PC0 ? 0U : T07_DQ_PER_PC;
-        u8 dq_end = (u8)(dq_begin + T07_DQ_PER_PC);
+        u8 pc = pc_index == 0U ? PC0 : PC1;
+        u8 dq_begin = pc == PC0 ? 0U : DQ_PER_PC;
+        u8 dq_end = (u8)(dq_begin + DQ_PER_PC);
         u8 mck_dly;
 
-        for (mck_dly = 0U; mck_dly < T07_MCK_DLY_COUNT; ++mck_dly) {
+        for (mck_dly = 0U; mck_dly < MCK_DLY_COUNT; ++mck_dly) {
             u8 bit_dly;
 
-            for (bit_dly = 0U; bit_dly < T07_BIT_DLY_COUNT; ++bit_dly) {
+            for (bit_dly = 0U; bit_dly < BIT_DLY_COUNT; ++bit_dly) {
                 /*
                  * KO_NOTE:
                  * active[local_dq]는 현재 pe_dly에서 pass run이 열려 있는지 표시합니다.
@@ -859,15 +859,15 @@ int t07_run_read_training_sweep(u16 result_len,
                  * 예: pe 3부터 pass가 시작되면 active=1, pe_start=3이 되고,
                  *     나중에 fail을 만나면 pe_start..(pe_dly-1)을 zone으로 저장합니다.
                  */
-                u8 active[T07_DQ_PER_PC];
-                u16 pe_start[T07_DQ_PER_PC];
+                u8 active[DQ_PER_PC];
+                u16 pe_start[DQ_PER_PC];
                 u16 pe_dly;
                 u8 dq;
 
                 memset(active, 0, sizeof(active));
                 memset(pe_start, 0, sizeof(pe_start));
 
-                for (pe_dly = 0U; pe_dly < T07_PE_DLY_COUNT; ++pe_dly) {
+                for (pe_dly = 0U; pe_dly < PE_DLY_COUNT; ++pe_dly) {
                     size_t valid_rx_count = 0U;
                     int status;
 
@@ -878,8 +878,8 @@ int t07_run_read_training_sweep(u16 result_len,
                      */
                     for (dq = dq_begin; dq < dq_end; ++dq) {
                         status = g_t07_apply_delay(pc, dq, mck_dly, bit_dly, pe_dly);
-                        if (status != T07_OK) {
-                            return status < 0 ? status : T07_ERROR_DELAY_APPLY;
+                        if (status != TRAINING_OK) {
+                            return status < 0 ? status : TRAINING_ERROR_DELAY_APPLY;
                         }
                     }
 
@@ -889,7 +889,7 @@ int t07_run_read_training_sweep(u16 result_len,
                                                        valid_rx,
                                                        valid_rx_capacity,
                                                        &valid_rx_count);
-                    if (status != T07_OK) {
+                    if (status != TRAINING_OK) {
                         return status;
                     }
 
@@ -902,8 +902,8 @@ int t07_run_read_training_sweep(u16 result_len,
                         size_t local_dq = (size_t)(dq - dq_begin);
                         int passed = 0;
 
-                        if (valid_rx_count >= T07_READ_LFSR_LENGTH &&
-                            t07_check_dq_lfsr(valid_rx, valid_rx_count, dq, NULL) == T07_OK) {
+                        if (valid_rx_count >= READ_LFSR_LENGTH &&
+                            t07_check_dq_lfsr(valid_rx, valid_rx_count, dq, NULL) == TRAINING_OK) {
                             passed = 1;
                         }
 
@@ -930,7 +930,7 @@ int t07_run_read_training_sweep(u16 result_len,
                                                        bit_dly,
                                                        pe_start[local_dq],
                                                        (u16)(pe_dly - 1U));
-                            if (status != T07_OK) {
+                            if (status != TRAINING_OK) {
                                 return status;
                             }
                             active[local_dq] = 0U;
@@ -938,11 +938,11 @@ int t07_run_read_training_sweep(u16 result_len,
                     }
                 }
 
-                if (T07_PE_DLY_COUNT > 0U) {
+                if (PE_DLY_COUNT > 0U) {
                     /*
                      * KO_NOTE:
                      * pe_dly loop가 끝날 때까지 계속 pass였던 run은 fail을 만나지 못했으므로
-                     * 여기서 마지막 pe_dly(T07_PE_DLY_COUNT-1)까지의 zone으로 닫아줍니다.
+                     * 여기서 마지막 pe_dly(PE_DLY_COUNT-1)까지의 zone으로 닫아줍니다.
                      */
                     for (dq = dq_begin; dq < dq_end; ++dq) {
                         size_t local_dq = (size_t)(dq - dq_begin);
@@ -954,9 +954,9 @@ int t07_run_read_training_sweep(u16 result_len,
                                                            mck_dly,
                                                            bit_dly,
                                                            pe_start[local_dq],
-                                                           (u16)(T07_PE_DLY_COUNT - 1U));
+                                                           (u16)(PE_DLY_COUNT - 1U));
 
-                            if (status != T07_OK) {
+                            if (status != TRAINING_OK) {
                                 return status;
                             }
                         }
@@ -974,5 +974,5 @@ int t07_run_read_training_sweep(u16 result_len,
          */
         memcpy(centers, pass_data->best_center, sizeof(pass_data->best_center));
     }
-    return T07_OK;
+    return TRAINING_OK;
 }

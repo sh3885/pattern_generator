@@ -8,10 +8,10 @@
 #define TEST_ACK_OK 0xF0U
 #define TEST_MAX_RESPONSES 200U
 #define SAMPLE_RESULT_COUNT 10U
-#define EXPECTED_VALID_RX_COUNT T07_READ_LFSR_LENGTH
+#define EXPECTED_VALID_RX_COUNT READ_LFSR_LENGTH
 
-#ifndef T07_RESULT_LOG_PATH
-#define T07_RESULT_LOG_PATH "t07_result_visual_log.txt"
+#ifndef RESULT_LOG_PATH
+#define RESULT_LOG_PATH "t07_result_visual_log.txt"
 #endif
 
 static const u8 SAMPLE_READ_EN_PC0[SAMPLE_RESULT_COUNT] = {
@@ -26,12 +26,12 @@ static u64 g_commands[16];
 static size_t g_command_count;
 static int g_generate_sweep_responses;
 static int g_sweep_entries_valid;
-static T07Pc g_sweep_pc;
+static u8 g_sweep_pc;
 static u8 g_sweep_mck_dly;
 static u8 g_sweep_bit_dly;
 static u16 g_sweep_pe_dly;
 static T07ResultEntry g_sweep_entries[SAMPLE_RESULT_COUNT];
-static u32 g_generated_segments[T07_RESULT_SEGMENT_COUNT];
+static u32 g_generated_segments[RESULT_SEGMENT_COUNT];
 static size_t g_generated_segment_index;
 static size_t g_apply_delay_call_count;
 static size_t g_pass_zone_log_count;
@@ -49,7 +49,7 @@ static void reset_mock_io(void)
     g_command_count = 0U;
     g_generate_sweep_responses = 0;
     g_sweep_entries_valid = 0;
-    g_sweep_pc = T07_PC0;
+    g_sweep_pc = PC0;
     g_sweep_mck_dly = 0U;
     g_sweep_bit_dly = 0U;
     g_sweep_pe_dly = 0U;
@@ -85,9 +85,9 @@ static u64 mock_in64(uintptr_t addr)
         u8 pkt_cnt;
         u8 seg_cnt;
 
-        assert(i < T07_RESULT_SEGMENT_COUNT);
-        pkt_cnt = i == (T07_RESULT_SEGMENT_COUNT - 1U) ? 1U : 0U;
-        seg_cnt = i == (T07_RESULT_SEGMENT_COUNT - 1U) ? 0U : (u8)(i + 1U);
+        assert(i < RESULT_SEGMENT_COUNT);
+        pkt_cnt = i == (RESULT_SEGMENT_COUNT - 1U) ? 1U : 0U;
+        seg_cnt = i == (RESULT_SEGMENT_COUNT - 1U) ? 0U : (u8)(i + 1U);
         ++g_generated_segment_index;
         return make_response(pkt_cnt, seg_cnt, g_generated_segments[i]);
     }
@@ -107,8 +107,8 @@ static u64 make_response(u8 pkt_cnt, u8 seg_cnt, u32 data)
 
 static u8 expected_valid_rx_byte(size_t sample_index, size_t dq)
 {
-    return expected_read_lfsr[sample_index % T07_READ_LFSR_LENGTH]
-                             [dq % T07_READ_LFSR_DQ_GROUP_SIZE];
+    return expected_read_lfsr[sample_index % READ_LFSR_LENGTH]
+                             [dq % READ_LFSR_DQ_GROUP_SIZE];
 }
 
 static u8 noise_rx_byte(size_t result_index, size_t dq)
@@ -126,9 +126,9 @@ static void bits_to_string(u8 value, char out[9])
     out[8] = '\0';
 }
 
-static void pack_entry(const T07ResultEntry *entry, u32 segments[T07_RESULT_SEGMENT_COUNT])
+static void pack_entry(const T07ResultEntry *entry, u32 segments[RESULT_SEGMENT_COUNT])
 {
-    u8 bytes[T07_RESULT_SEGMENT_COUNT * 4U];
+    u8 bytes[RESULT_SEGMENT_COUNT * 4U];
     size_t i;
 
     memset(bytes, 0, sizeof(bytes));
@@ -141,7 +141,7 @@ static void pack_entry(const T07ResultEntry *entry, u32 segments[T07_RESULT_SEGM
     bytes[12U] = entry->read_tph_pc1;
     memcpy(&bytes[13U], entry->rx_dq, sizeof(entry->rx_dq));
 
-    for (i = 0U; i < T07_RESULT_SEGMENT_COUNT; ++i) {
+    for (i = 0U; i < RESULT_SEGMENT_COUNT; ++i) {
         segments[i] = (u32)bytes[(i * 4U) + 0U] |
                       ((u32)bytes[(i * 4U) + 1U] << 8) |
                       ((u32)bytes[(i * 4U) + 2U] << 16) |
@@ -149,7 +149,7 @@ static void pack_entry(const T07ResultEntry *entry, u32 segments[T07_RESULT_SEGM
     }
 }
 
-static int sweep_should_pass(T07Pc pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly)
+static int sweep_should_pass(u8 pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly)
 {
     u8 local_dq;
     u8 main_mck;
@@ -162,17 +162,17 @@ static int sweep_should_pass(T07Pc pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly
     u16 short_start;
     u16 short_end;
 
-    if (pc == T07_PC0) {
-        if (dq >= T07_DQ_PER_PC) {
+    if (pc == PC0) {
+        if (dq >= DQ_PER_PC) {
             return 0;
         }
         local_dq = dq;
-        main_mck = (u8)(local_dq % T07_MCK_DLY_COUNT);
-        main_bit = (u8)((local_dq / 2U) % T07_BIT_DLY_COUNT);
+        main_mck = (u8)(local_dq % MCK_DLY_COUNT);
+        main_bit = (u8)((local_dq / 2U) % BIT_DLY_COUNT);
         main_start = (u8)(local_dq % 12U);
         main_count = (u8)(10U + (local_dq % 5U));
-        short_mck = (u8)((main_mck + 1U) % T07_MCK_DLY_COUNT);
-        short_bit = (u8)((main_bit + 1U) % T07_BIT_DLY_COUNT);
+        short_mck = (u8)((main_mck + 1U) % MCK_DLY_COUNT);
+        short_bit = (u8)((main_bit + 1U) % BIT_DLY_COUNT);
         short_start = (u8)(48U + (local_dq % 4U));
         if (local_dq == 0U) {
             main_mck = 0U;
@@ -184,29 +184,29 @@ static int sweep_should_pass(T07Pc pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly
             short_start = 48U;
         }
     } else {
-        if (dq < T07_DQ_PER_PC || dq >= T07_RX_DQ_COUNT) {
+        if (dq < DQ_PER_PC || dq >= RX_DQ_COUNT) {
             return 0;
         }
-        local_dq = (u8)(dq - T07_DQ_PER_PC);
-        main_mck = (u8)(15U - (local_dq % T07_MCK_DLY_COUNT));
-        main_bit = (u8)(7U - ((local_dq / 2U) % T07_BIT_DLY_COUNT));
+        local_dq = (u8)(dq - DQ_PER_PC);
+        main_mck = (u8)(15U - (local_dq % MCK_DLY_COUNT));
+        main_bit = (u8)(7U - ((local_dq / 2U) % BIT_DLY_COUNT));
         main_start = (u8)(4U + (local_dq % 10U));
         main_count = (u8)(8U + (local_dq % 7U));
-        short_mck = (u8)((main_mck + 15U) % T07_MCK_DLY_COUNT);
-        short_bit = (u8)((main_bit + 7U) % T07_BIT_DLY_COUNT);
+        short_mck = (u8)((main_mck + 15U) % MCK_DLY_COUNT);
+        short_bit = (u8)((main_bit + 7U) % BIT_DLY_COUNT);
         short_start = (u8)(40U + (local_dq % 5U));
     }
 
     main_end = (u8)(main_start + main_count - 1U);
     short_end = (u8)(short_start + 2U);
 
-    if (pc == T07_PC0 && dq == 0U) {
+    if (pc == PC0 && dq == 0U) {
         if (bit_dly == 0U && pe_dly == (u16)(mck_dly % 4U)) {
             return 1;
         }
         if (mck_dly == 15U &&
             bit_dly == 7U &&
-            pe_dly < T07_PE_DLY_COUNT) {
+            pe_dly < PE_DLY_COUNT) {
             return 1;
         }
     }
@@ -226,12 +226,12 @@ static int sweep_should_pass(T07Pc pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly
     return 0;
 }
 
-static int mock_apply_delay(T07Pc pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly)
+static int mock_apply_delay(u8 pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly)
 {
-    if (pc == T07_PC0) {
-        assert(dq < T07_DQ_PER_PC);
+    if (pc == PC0) {
+        assert(dq < DQ_PER_PC);
     } else {
-        assert(dq >= T07_DQ_PER_PC && dq < T07_RX_DQ_COUNT);
+        assert(dq >= DQ_PER_PC && dq < RX_DQ_COUNT);
     }
 
     g_sweep_pc = pc;
@@ -240,7 +240,7 @@ static int mock_apply_delay(T07Pc pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly)
     g_sweep_pe_dly = pe_dly;
     g_sweep_entries_valid = 0;
     ++g_apply_delay_call_count;
-    return T07_OK;
+    return TRAINING_OK;
 }
 
 static void make_sweep_data(void)
@@ -264,12 +264,12 @@ static void make_sweep_data(void)
         entry->comp_results_pc1[1] = (u8)(0x60U + result_index);
         entry->comp_results_pc1[2] = (u8)(0x70U + result_index);
         entry->comp_results_pc1[3] = (u8)(0x80U + result_index);
-        entry->read_en_pc0 = g_sweep_pc == T07_PC0 ? SAMPLE_READ_EN_PC0[result_index] : 0x00U;
-        entry->read_en_pc1 = g_sweep_pc == T07_PC1 ? SAMPLE_READ_EN_PC0[result_index] : 0x00U;
+        entry->read_en_pc0 = g_sweep_pc == PC0 ? SAMPLE_READ_EN_PC0[result_index] : 0x00U;
+        entry->read_en_pc1 = g_sweep_pc == PC1 ? SAMPLE_READ_EN_PC0[result_index] : 0x00U;
         entry->read_tph_pc0 = (u8)(0xB0U + result_index);
         entry->read_tph_pc1 = (u8)(0xC0U + result_index);
 
-        for (dq = 0U; dq < T07_RX_DQ_COUNT; ++dq) {
+        for (dq = 0U; dq < RX_DQ_COUNT; ++dq) {
             entry->rx_dq[dq] = noise_rx_byte(result_index, dq);
         }
     }
@@ -279,7 +279,7 @@ static void make_sweep_data(void)
 
         for (bit = 0U; bit < 8U; ++bit) {
             if (((SAMPLE_READ_EN_PC0[result_index] >> bit) & 0x01U) != 0U) {
-                for (dq = 0U; dq < T07_RX_DQ_COUNT; ++dq) {
+                for (dq = 0U; dq < RX_DQ_COUNT; ++dq) {
                     u8 compact_value = expected_valid_rx_byte(produced, dq);
                     u8 bit_value;
 
@@ -326,13 +326,13 @@ static void start_generated_response(u16 bram_addr)
 
 static void queue_entry_response(const T07ResultEntry *entry)
 {
-    u32 segments[T07_RESULT_SEGMENT_COUNT];
+    u32 segments[RESULT_SEGMENT_COUNT];
     size_t i;
 
     pack_entry(entry, segments);
-    for (i = 0U; i < T07_RESULT_SEGMENT_COUNT; ++i) {
-        u8 pkt_cnt = i == (T07_RESULT_SEGMENT_COUNT - 1U) ? 1U : 0U;
-        u8 seg_cnt = i == (T07_RESULT_SEGMENT_COUNT - 1U) ? 0U : (u8)(i + 1U);
+    for (i = 0U; i < RESULT_SEGMENT_COUNT; ++i) {
+        u8 pkt_cnt = i == (RESULT_SEGMENT_COUNT - 1U) ? 1U : 0U;
+        u8 seg_cnt = i == (RESULT_SEGMENT_COUNT - 1U) ? 0U : (u8)(i + 1U);
 
         assert(g_response_count < TEST_MAX_RESPONSES);
         g_responses[g_response_count] = make_response(pkt_cnt, seg_cnt, segments[i]);
@@ -342,7 +342,7 @@ static void queue_entry_response(const T07ResultEntry *entry)
 
 static void queue_bad_sequence_response(const T07ResultEntry *entry)
 {
-    u32 segments[T07_RESULT_SEGMENT_COUNT];
+    u32 segments[RESULT_SEGMENT_COUNT];
 
     pack_entry(entry, segments);
     assert(g_response_count < TEST_MAX_RESPONSES);
@@ -362,7 +362,7 @@ static void make_sample_data(T07ResultEntry raw_entries[SAMPLE_RESULT_COUNT],
     memset(expected_valid_rx, 0, sizeof(T07ValidRxEntry) * EXPECTED_VALID_RX_COUNT);
 
     for (produced = 0U; produced < EXPECTED_VALID_RX_COUNT; ++produced) {
-        for (dq = 0U; dq < T07_RX_DQ_COUNT; ++dq) {
+        for (dq = 0U; dq < RX_DQ_COUNT; ++dq) {
             expected_valid_rx[produced].rx_dq[dq] = expected_valid_rx_byte(produced, dq);
         }
     }
@@ -384,7 +384,7 @@ static void make_sample_data(T07ResultEntry raw_entries[SAMPLE_RESULT_COUNT],
         entry->read_tph_pc0 = (u8)(0x90U + result_index);
         entry->read_tph_pc1 = (u8)(0xA0U + result_index);
 
-        for (dq = 0U; dq < T07_RX_DQ_COUNT; ++dq) {
+        for (dq = 0U; dq < RX_DQ_COUNT; ++dq) {
             entry->rx_dq[dq] = noise_rx_byte(result_index, dq);
         }
     }
@@ -396,7 +396,7 @@ static void make_sample_data(T07ResultEntry raw_entries[SAMPLE_RESULT_COUNT],
 
         for (bit = 0U; bit < 8U; ++bit) {
             if (((SAMPLE_READ_EN_PC0[result_index] >> bit) & 0x01U) != 0U) {
-                for (dq = 0U; dq < T07_RX_DQ_COUNT; ++dq) {
+                for (dq = 0U; dq < RX_DQ_COUNT; ++dq) {
                     u8 bit_value = (u8)((expected_valid_rx[produced].rx_dq[dq] >> bits_in_run) & 0x01U);
 
                     raw_entries[result_index].rx_dq[dq] =
@@ -457,7 +457,7 @@ static void assert_valid_rx_equal(const T07ValidRxEntry *expected,
     }
 }
 
-static void write_rx_rows(FILE *log, const u8 rx_dq[T07_RX_DQ_COUNT])
+static void write_rx_rows(FILE *log, const u8 rx_dq[RX_DQ_COUNT])
 {
     size_t row;
 
@@ -502,13 +502,13 @@ static void write_result_entry(FILE *log, size_t index, const T07ResultEntry *en
 
 static void write_segments(FILE *log, size_t index, const T07ResultEntry *entry)
 {
-    u32 segments[T07_RESULT_SEGMENT_COUNT];
+    u32 segments[RESULT_SEGMENT_COUNT];
     size_t i;
 
     pack_entry(entry, segments);
 
     fprintf(log, "result[%u] raw 20 segments:", (unsigned int)index);
-    for (i = 0U; i < T07_RESULT_SEGMENT_COUNT; ++i) {
+    for (i = 0U; i < RESULT_SEGMENT_COUNT; ++i) {
         fprintf(log, " %08X", segments[i]);
     }
     fprintf(log, "\n");
@@ -558,7 +558,7 @@ static void write_visual_log(FILE *log,
 
 static void write_sweep_log(FILE *log,
                             const T07PassData *pass_data,
-                            const T07PassCenter centers[T07_PC_COUNT][T07_DQ_PER_PC])
+                            const T07PassCenter centers[PC_COUNT][DQ_PER_PC])
 {
     size_t pc_index;
 
@@ -568,13 +568,13 @@ static void write_sweep_log(FILE *log,
     fprintf(log, "PC0 controls dq00..dq31. PC1 controls dq32..dq63.\n");
     fprintf(log, "A pass point means every compact valid_rx sample matched expected_read_lfsr for that DQ.\n");
 
-    for (pc_index = 0U; pc_index < T07_PC_COUNT; ++pc_index) {
-        T07Pc pc = pc_index == 0U ? T07_PC0 : T07_PC1;
+    for (pc_index = 0U; pc_index < PC_COUNT; ++pc_index) {
+        u8 pc = pc_index == 0U ? PC0 : PC1;
         size_t local_dq;
 
         fprintf(log, "\nPC%u stored pass zones and centers\n", (unsigned int)pc_index);
-        for (local_dq = 0U; local_dq < T07_DQ_PER_PC; ++local_dq) {
-            u8 dq = (u8)(pc_index == 0U ? local_dq : (local_dq + T07_DQ_PER_PC));
+        for (local_dq = 0U; local_dq < DQ_PER_PC; ++local_dq) {
+            u8 dq = (u8)(pc_index == 0U ? local_dq : (local_dq + DQ_PER_PC));
             T07PassZone zones[16];
             size_t zone_count = t07_collect_pass_zones(pass_data, pc, dq, zones, 16U);
             size_t zone_index;
@@ -654,20 +654,20 @@ static void run_sample_parse_test(FILE *log)
     }
 
     status = t07_read_training_results(SAMPLE_RESULT_COUNT,
-                                       T07_PC0,
+                                       PC0,
                                        parsed_entries,
                                        actual_valid_rx,
                                        EXPECTED_VALID_RX_COUNT,
                                        &valid_rx_count);
 
-    assert(status == T07_OK);
+    assert(status == TRAINING_OK);
     assert(valid_rx_count == EXPECTED_VALID_RX_COUNT);
     assert(g_command_count == SAMPLE_RESULT_COUNT);
-    assert(g_response_index == SAMPLE_RESULT_COUNT * T07_RESULT_SEGMENT_COUNT);
+    assert(g_response_index == SAMPLE_RESULT_COUNT * RESULT_SEGMENT_COUNT);
 
     assert_entries_equal(raw_entries, parsed_entries, SAMPLE_RESULT_COUNT);
     assert_valid_rx_equal(expected_valid_rx, actual_valid_rx, EXPECTED_VALID_RX_COUNT);
-    assert(t07_check_valid_rx_lfsr(actual_valid_rx, valid_rx_count, NULL, NULL) == T07_OK);
+    assert(t07_check_valid_rx_lfsr(actual_valid_rx, valid_rx_count, NULL, NULL) == TRAINING_OK);
 
     write_visual_log(log, raw_entries, parsed_entries, actual_valid_rx);
 }
@@ -676,7 +676,7 @@ static void test_retries_bad_packet_sequence(void)
 {
     T07ResultEntry raw_entries[SAMPLE_RESULT_COUNT];
     T07ValidRxEntry expected_valid_rx[EXPECTED_VALID_RX_COUNT];
-    u32 raw_segments[T07_RESULT_SEGMENT_COUNT];
+    u32 raw_segments[RESULT_SEGMENT_COUNT];
     u8 pkt_cnt = 0U;
     u8 seg_cnt = 0U;
     int status;
@@ -688,18 +688,18 @@ static void test_retries_bad_packet_sequence(void)
     queue_bad_sequence_response(&raw_entries[0]);
     queue_entry_response(&raw_entries[0]);
 
-    status = t07_rsult_read(T07_MODE_READ,
-                            T07_RESULT_FRAME_NUM,
+    status = t07_rsult_read(MODE_READ,
+                            RESULT_FRAME_NUM,
                             0U,
                             &pkt_cnt,
                             &seg_cnt,
                             raw_segments);
 
-    assert(status == T07_OK);
+    assert(status == TRAINING_OK);
     assert(g_command_count == 2U);
     assert(g_commands[0] == 0x93C0000000000000ULL);
     assert(g_commands[1] == 0x93C0000000000000ULL);
-    assert(g_response_index == T07_RESULT_SEGMENT_COUNT + 1U);
+    assert(g_response_index == RESULT_SEGMENT_COUNT + 1U);
     assert(pkt_cnt == 1U);
     assert(seg_cnt == 0U);
 }
@@ -710,11 +710,11 @@ static void test_lfsr_mismatch_reports_dq(void)
     size_t sample;
     size_t dq;
     size_t failed_sample = 2U;
-    size_t failed_dq = T07_RX_DQ_COUNT;
+    size_t failed_dq = RX_DQ_COUNT;
     int status;
 
     for (sample = 0U; sample < 2U; ++sample) {
-        for (dq = 0U; dq < T07_RX_DQ_COUNT; ++dq) {
+        for (dq = 0U; dq < RX_DQ_COUNT; ++dq) {
             rx[sample].rx_dq[dq] = expected_valid_rx_byte(sample, dq);
         }
     }
@@ -722,7 +722,7 @@ static void test_lfsr_mismatch_reports_dq(void)
 
     status = t07_check_valid_rx_lfsr(rx, 2U, &failed_sample, &failed_dq);
 
-    assert(status == T07_ERROR_LFSR_MISMATCH);
+    assert(status == TRAINING_ERROR_LFSR_MISMATCH);
     assert(failed_sample == 1U);
     assert(failed_dq == 17U);
 }
@@ -745,20 +745,20 @@ static void test_rejects_incomplete_window(void)
     queue_entry_response(&raw_entries[1]);
 
     status = t07_read_training_results(2U,
-                                       T07_PC0,
+                                       PC0,
                                        parsed_entries,
                                        actual_valid_rx,
                                        EXPECTED_VALID_RX_COUNT,
                                        &valid_rx_count);
 
-    assert(status == T07_ERROR_READ_ENABLE);
+    assert(status == TRAINING_ERROR_READ_ENABLE);
     assert(valid_rx_count == 0U);
 }
 
 static void run_sweep_test(FILE *log)
 {
     static T07PassData pass_data;
-    static T07PassCenter centers[T07_PC_COUNT][T07_DQ_PER_PC];
+    static T07PassCenter centers[PC_COUNT][DQ_PER_PC];
     T07ResultEntry parsed_entries[SAMPLE_RESULT_COUNT];
     T07ValidRxEntry valid_rx[EXPECTED_VALID_RX_COUNT];
     int status;
@@ -778,26 +778,26 @@ static void run_sweep_test(FILE *log)
                                          &pass_data,
                                          centers);
 
-    assert(status == T07_OK);
+    assert(status == TRAINING_OK);
     t07_set_pass_zone_log(NULL, NULL);
     assert(g_pass_zone_log_count ==
-           ((size_t)T07_PC_COUNT * (size_t)T07_DQ_PER_PC * 2U) + 17U);
+           ((size_t)PC_COUNT * (size_t)DQ_PER_PC * 2U) + 17U);
     assert(g_pass_zone_log_overflow_count == 3U);
     assert(g_apply_delay_call_count ==
-           (size_t)T07_PC_COUNT *
-           (size_t)T07_MCK_DLY_COUNT *
-           (size_t)T07_BIT_DLY_COUNT *
-           (size_t)T07_PE_DLY_COUNT *
-           (size_t)T07_DQ_PER_PC);
+           (size_t)PC_COUNT *
+           (size_t)MCK_DLY_COUNT *
+           (size_t)BIT_DLY_COUNT *
+           (size_t)PE_DLY_COUNT *
+           (size_t)DQ_PER_PC);
 
-    assert(t07_get_pass(&pass_data, T07_PC0, 0U, 0U, 3U, 3U) != 0);
-    assert(t07_get_pass(&pass_data, T07_PC0, 0U, 0U, 3U, 63U) != 0);
-    assert(t07_get_pass(&pass_data, T07_PC0, 0U, 0U, 3U, 2U) == 0);
-    assert(t07_get_pass(&pass_data, T07_PC0, 31U, 15U, 7U, 17U) != 0);
-    assert(t07_get_pass(&pass_data, T07_PC1, 32U, 15U, 7U, 4U) != 0);
-    assert(t07_get_pass(&pass_data, T07_PC1, 63U, 0U, 0U, 15U) != 0);
-    assert(t07_get_pass(&pass_data, T07_PC0, 32U, 0U, 0U, 0U) == 0);
-    assert(t07_get_pass(&pass_data, T07_PC1, 31U, 0U, 0U, 0U) == 0);
+    assert(t07_get_pass(&pass_data, PC0, 0U, 0U, 3U, 3U) != 0);
+    assert(t07_get_pass(&pass_data, PC0, 0U, 0U, 3U, 63U) != 0);
+    assert(t07_get_pass(&pass_data, PC0, 0U, 0U, 3U, 2U) == 0);
+    assert(t07_get_pass(&pass_data, PC0, 31U, 15U, 7U, 17U) != 0);
+    assert(t07_get_pass(&pass_data, PC1, 32U, 15U, 7U, 4U) != 0);
+    assert(t07_get_pass(&pass_data, PC1, 63U, 0U, 0U, 15U) != 0);
+    assert(t07_get_pass(&pass_data, PC0, 32U, 0U, 0U, 0U) == 0);
+    assert(t07_get_pass(&pass_data, PC1, 31U, 0U, 0U, 0U) == 0);
 
     assert(centers[0][0].valid != 0U);
     assert(centers[0][0].dq == 0U);
@@ -820,7 +820,7 @@ static void run_sweep_test(FILE *log)
 
 int main(void)
 {
-    FILE *log = fopen(T07_RESULT_LOG_PATH, "w");
+    FILE *log = fopen(RESULT_LOG_PATH, "w");
 
     assert(log != NULL);
     run_sample_parse_test(log);

@@ -57,7 +57,7 @@ target_link_libraries(t07_result_tests
 target_compile_definitions(t07_result_tests
     PRIVATE
         READ_TRAINING_EXPOSE_TEST_HELPERS
-        T07_RESULT_LOG_PATH="${CMAKE_CURRENT_BINARY_DIR}/t07_result_visual_log.txt"
+        RESULT_LOG_PATH="${CMAKE_CURRENT_BINARY_DIR}/t07_result_visual_log.txt"
 )
 
 add_test(NAME t07_result_tests COMMAND t07_result_tests)
