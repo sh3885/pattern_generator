@@ -32,9 +32,38 @@ ca_trn_misr_list = [
     '222BB8AEEA',
     '222BB8ABEA',
     '222BB8AAEA',
+
+    '23DBB8AAEB', 
+    '25EB
     
-    '23DBB8AAEB',
-    '25EBB8AAEE',
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    B8AAEE',
     '3D2BB8AAFA',
     '1E2BB8AAC9',
     '122BB8AAC3',
