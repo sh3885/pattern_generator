@@ -3,6 +3,27 @@
 #include <ctype.h>
 #include <string.h>
 
+/*
+ * KO_NOTE:
+ * 이 파일은 T07 read training을 PC test와 FW build 양쪽에서 같이 쓰기 위한 구현입니다.
+ * 큰 흐름은 아래 순서입니다.
+ *
+ * 1. t07_run_read_training_sweep()
+ *    pc -> mck_dly -> bit_dly -> pe_dly 순서로 delay를 sweep합니다.
+ *
+ * 2. 각 delay point마다 g_t07_apply_delay()로 DQ delay를 실제 HW/FW 쪽에 적용합니다.
+ *
+ * 3. t07_read_training_results()가 HW result table을 읽고, read_en으로 표시된 bit만 모아
+ *    T07ValidRxEntry 형태의 compact sample을 만듭니다.
+ *
+ * 4. t07_check_dq_lfsr()가 DQ별 compact sample이 expected_read_lfsr와 맞는지 검사합니다.
+ *
+ * 5. pass가 연속되는 pe_dly 구간을 t07_add_pass_zone()에서 zone으로 닫고 저장합니다.
+ *    이때 zone 저장 슬롯이 꽉 차도 best_center는 계속 갱신됩니다.
+ *
+ * 나중에 주석을 제거하려면 "KO_NOTE"로 검색하면 됩니다.
+ */
+
 #define T07_CMD_CODE 0x93U
 #define T07_ACK_OK 0xF0U
 #define T07_ACK_TBL_ERR 0x51U
@@ -57,11 +78,22 @@ static T07In64Fn g_t07_in64 = t07_native_in64;
  * PC test path.
  * Tests inject mock functions with t07_set_io(), so this file can be built
  * without Xilinx headers or hardware.
+ *
+ * KO_NOTE:
+ * PC 테스트에서는 실제 Xil_Out64/Xil_In64가 없으므로 함수 포인터를 NULL로 둡니다.
+ * 테스트 코드가 t07_set_io(mock_out64, mock_in64)를 호출해서 가짜 IO를 연결합니다.
  */
 static T07Out64Fn g_t07_out64 = NULL;
 static T07In64Fn g_t07_in64 = NULL;
 #endif
 
+/*
+ * KO_NOTE:
+ * 아래 세 포인터는 FW 쪽에서 연결해주는 "외부 의존성"입니다.
+ * - g_t07_out64 / g_t07_in64: result table command/response register 접근
+ * - g_t07_apply_delay: 현재 sweep point의 delay 값을 실제 PHY/DQ에 적용
+ * - g_t07_pass_zone_log: zone 발견 이벤트를 UART/file/buffer 등으로 내보내는 선택 기능
+ */
 static T07ApplyDelayFn g_t07_apply_delay = NULL;
 static T07PassZoneLogFn g_t07_pass_zone_log = NULL;
 static void *g_t07_pass_zone_log_context = NULL;
@@ -87,6 +119,11 @@ const u8 expected_read_lfsr[T07_READ_LFSR_LENGTH][T07_READ_LFSR_DQ_GROUP_SIZE] =
     {0x16U, 0x1DU, 0x24U, 0x2BU, 0x32U, 0x39U, 0x40U, 0x47U}
 };
 
+/*
+ * KO_NOTE:
+ * 여기부터 rt_* 함수들은 read_training 예제용 작은 공통 함수입니다.
+ * T07 training 핵심과는 직접 관련이 없고, 기본 C library/test 구조를 보여주는 용도입니다.
+ */
 const char *rt_status_message(RtStatus status)
 {
     switch (status) {
@@ -148,9 +185,19 @@ RtStatus rt_trim_line(const char *line, char *out, size_t out_size, size_t *writ
 void t07_set_io(T07Out64Fn out64, T07In64Fn in64)
 {
 #if defined(T07_USE_NATIVE_XIL_IO)
+    /*
+     * KO_NOTE:
+     * Board build에서는 out64/in64를 NULL로 넘기면 native Xil_Out64/Xil_In64 wrapper를 씁니다.
+     * 테스트나 특수 FW에서 다른 IO layer를 쓰고 싶으면 NULL이 아닌 함수 포인터를 넘기면 됩니다.
+     */
     g_t07_out64 = out64 != NULL ? out64 : t07_native_out64;
     g_t07_in64 = in64 != NULL ? in64 : t07_native_in64;
 #else
+    /*
+     * KO_NOTE:
+     * PC build에서는 native IO가 없으므로 NULL이면 "IO 미설정" 상태가 됩니다.
+     * 이 상태에서 t07_rsult_read()를 부르면 T07_ERROR_IO_NOT_CONFIGURED가 반환됩니다.
+     */
     g_t07_out64 = out64;
     g_t07_in64 = in64;
 #endif
@@ -158,15 +205,30 @@ void t07_set_io(T07Out64Fn out64, T07In64Fn in64)
 
 void t07_set_delay_apply(T07ApplyDelayFn apply_delay)
 {
+    /*
+     * KO_NOTE:
+     * sweep loop는 delay 값을 계산만 하고, 실제 register write 방법은 모릅니다.
+     * FW 쪽에서 이 콜백에 "pc/dq/mck/bit/pe를 HW에 적용하는 함수"를 연결해야 합니다.
+     */
     g_t07_apply_delay = apply_delay;
 }
 
 void t07_set_pass_zone_log(T07PassZoneLogFn log_fn, void *user_context)
 {
+    /*
+     * KO_NOTE:
+     * pass zone이 발견될 때마다 로그를 남기고 싶으면 log_fn을 연결합니다.
+     * user_context는 FILE*, UART handle, ring buffer 포인터 등 호출자가 원하는 값을 넘기면 됩니다.
+     */
     g_t07_pass_zone_log = log_fn;
     g_t07_pass_zone_log_context = user_context;
 }
 
+/*
+ * KO_NOTE:
+ * HW result table에서 20 segment짜리 packet 하나를 읽는 가장 낮은 단계 함수입니다.
+ * 함수명에 rsult 오타가 있지만, 이미 API로 쓰고 있어서 현재는 그대로 둔 상태입니다.
+ */
 int t07_rsult_read(u8 mode,
                    u8 frame_num,
                    u16 bram_addr,
@@ -211,6 +273,11 @@ int t07_rsult_read(u8 mode,
      * retry the whole packet read.
      */
     for (attempt = 0U; attempt < T07_RESULT_READ_RETRY_COUNT; ++attempt) {
+        /*
+         * KO_NOTE:
+         * retry_data에 먼저 임시 저장합니다.
+         * 중간에 packet sequence가 깨지면 이 attempt 전체를 버리고 다시 읽어야 하기 때문입니다.
+         */
         u32 retry_data[T07_RESULT_SEGMENT_COUNT];
         u8 last_pkt_cnt = 0U;
         u8 last_seg_cnt = 0U;
@@ -220,6 +287,11 @@ int t07_rsult_read(u8 mode,
         g_t07_out64(T07_RESULT_CMD_ADDR, cmd);
 
         for (i = 0U; i < T07_RESULT_SEGMENT_COUNT; ++i) {
+            /*
+             * KO_NOTE:
+             * rsp_raw 상위 byte에는 command/ack/pkt/segment 정보가 있고,
+             * 하위 32-bit에는 실제 result table segment 하나가 들어 있습니다.
+             */
             u64 rsp_raw = g_t07_in64(T07_RESULT_RSP_ADDR);
             u8 rsp_cmd = (u8)((rsp_raw >> 56) & 0xFFU);
             u8 ack = (u8)((rsp_raw >> 48) & 0xFFU);
@@ -241,6 +313,11 @@ int t07_rsult_read(u8 mode,
                 return T07_ERROR_ACK;
             }
 
+            /*
+             * KO_NOTE:
+             * 정상 packet은 segment 1..19가 오고 마지막에 pkt_cnt=1, seg_cnt=0이 옵니다.
+             * 순서가 틀리면 HW가 아직 이전/다른 packet을 내보낸 상황일 수 있으므로 retry합니다.
+             */
             if (pkt_cnt != expected_pkt_cnt || seg_cnt != expected_seg_cnt) {
                 sequence_ok = 0;
                 break;
@@ -262,6 +339,11 @@ int t07_rsult_read(u8 mode,
     return T07_ERROR_PACKET_SEQUENCE;
 }
 
+/*
+ * KO_NOTE:
+ * t07_rsult_read()로 읽은 raw segment들을 T07ResultEntry로 풀고,
+ * read_en이 켜진 bit들만 모아서 valid_rx compact sample을 만듭니다.
+ */
 int t07_read_training_results(u16 result_len,
                               T07Pc pc,
                               T07ResultEntry *entries,
@@ -289,6 +371,11 @@ int t07_read_training_results(u16 result_len,
      * packet, unpack it into T07ResultEntry, then collect enabled RX bits.
      */
     for (result_index = 0U; result_index < result_len; ++result_index) {
+        /*
+         * KO_NOTE:
+         * raw_segments는 HW에서 온 원본 20개 32-bit word입니다.
+         * bytes는 그 word를 little-endian table byte 순서로 펼친 임시 buffer입니다.
+         */
         u32 raw_segments[T07_RESULT_SEGMENT_COUNT];
         u8 bytes[T07_RESULT_SEGMENT_COUNT * 4U];
         u8 pkt_cnt = 0U;
@@ -380,11 +467,21 @@ int t07_read_training_results(u16 result_len,
             if (enabled != 0U) {
                 size_t dq;
 
+                /*
+                 * KO_NOTE:
+                 * bits_in_run==0은 새 compact sample을 시작한다는 뜻입니다.
+                 * 이전 sample 찌꺼기가 남지 않도록 64개 DQ working buffer를 모두 0으로 초기화합니다.
+                 */
                 if (bits_in_run == 0U) {
                     memset(working_rx, 0, sizeof(working_rx));
                 }
 
                 for (dq = 0U; dq < T07_RX_DQ_COUNT; ++dq) {
+                    /*
+                     * KO_NOTE:
+                     * result table의 rx_dq[dq] 안에는 bit0..bit7이 시간 순서로 들어 있습니다.
+                     * read_en이 켜진 bit만 뽑아 compact sample의 bit0, bit1, ... 위치에 다시 쌓습니다.
+                     */
                     u8 bit_value = (u8)((entries[result_index].rx_dq[dq] >> bit) & 0x01U);
                     working_rx[dq] = (u8)(working_rx[dq] | (u8)(bit_value << bits_in_run));
                 }
@@ -405,6 +502,11 @@ int t07_read_training_results(u16 result_len,
                     bits_in_run = 0U;
                 }
             } else if (bits_in_run != 0U) {
+                /*
+                 * KO_NOTE:
+                 * valid bit 8개가 연속으로 모여야 정상 sample입니다.
+                 * 중간에 read_en이 꺼지면 sample이 반쪽짜리가 되므로 에러 처리합니다.
+                 */
                 *valid_rx_count = produced;
                 return T07_ERROR_READ_ENABLE;
             }
@@ -422,6 +524,11 @@ int t07_read_training_results(u16 result_len,
 
 static int t07_dq_to_local(T07Pc pc, u8 dq, size_t *pc_index, size_t *local_dq)
 {
+    /*
+     * KO_NOTE:
+     * 외부에서는 PC0 dq0..31, PC1 dq32..63처럼 global DQ 번호를 씁니다.
+     * T07PassData 내부 배열은 PC별 local_dq 0..31로 저장하므로 여기서 변환합니다.
+     */
     if (pc == T07_PC0) {
         if (dq >= T07_DQ_PER_PC) {
             return T07_ERROR_INVALID_ARGUMENT;
@@ -450,6 +557,11 @@ static int t07_add_pass_zone(T07PassData *pass_data,
                              u16 pe_start,
                              u16 pe_end)
 {
+    /*
+     * KO_NOTE:
+     * pass가 연속된 pe_dly 구간을 하나의 zone으로 닫는 함수입니다.
+     * 중요한 점은 저장 공간(zones)은 최대 16개지만 center 계산은 저장 성공 여부와 독립이라는 것입니다.
+     */
     size_t pc_index;
     size_t local_dq;
     T07PassZone zone;
@@ -481,6 +593,11 @@ static int t07_add_pass_zone(T07PassData *pass_data,
     zone.pe_end = pe_end;
     zone.pe_count = (u16)(pe_end - pe_start + 1U);
 
+    /*
+     * KO_NOTE:
+     * zones[][][]는 디버그/조회용 보관소입니다.
+     * 꽉 차면 더 이상 저장하지 않지만, 아래 log callback과 best_center 갱신은 계속 진행합니다.
+     */
     if (pass_data->zone_count[pc_index][local_dq] < T07_MAX_PASS_ZONES_PER_DQ) {
         u8 zone_index = pass_data->zone_count[pc_index][local_dq];
 
@@ -489,11 +606,21 @@ static int t07_add_pass_zone(T07PassData *pass_data,
         stored = 1;
     }
 
+    /*
+     * KO_NOTE:
+     * stored=0인 callback은 "실제 zone은 발견됐지만 T07PassData에는 저장되지 못했다"는 뜻입니다.
+     * 이 덕분에 max 16개 제한 때문에 사라지는 zone도 UART/file 로그로 확인할 수 있습니다.
+     */
     if (g_t07_pass_zone_log != NULL) {
         g_t07_pass_zone_log(&zone, stored, g_t07_pass_zone_log_context);
     }
 
     best = &pass_data->best_center[pc_index][local_dq];
+    /*
+     * KO_NOTE:
+     * center는 가장 긴 pass zone의 가운데 pe_dly를 선택합니다.
+     * 이 코드는 zone 저장 if문 밖에 있으므로 overflow zone도 center 후보가 됩니다.
+     */
     if (best->valid == 0U || zone.pe_count > best->pe_count) {
         best->valid = 1U;
         best->pc = zone.pc;
@@ -513,6 +640,11 @@ int t07_check_dq_lfsr(const T07ValidRxEntry *valid_rx,
                       u8 dq,
                       size_t *failed_sample)
 {
+    /*
+     * KO_NOTE:
+     * 한 DQ만 검사합니다.
+     * valid_rx sample index가 0,1,2,...로 증가할 때 expected_read_lfsr는 6-row 주기로 반복됩니다.
+     */
     size_t sample;
 
     if (valid_rx_count > 0U && valid_rx == NULL) {
@@ -526,6 +658,11 @@ int t07_check_dq_lfsr(const T07ValidRxEntry *valid_rx,
         size_t lfsr_index = sample % T07_READ_LFSR_LENGTH;
         u8 expected = expected_read_lfsr[lfsr_index][dq % T07_READ_LFSR_DQ_GROUP_SIZE];
 
+        /*
+         * KO_NOTE:
+         * expected table은 dq0..dq7만 갖고 있고, dq8..15, dq16..23도 같은 8-DQ pattern을 반복합니다.
+         * 그래서 dq % 8로 expected column을 고릅니다.
+         */
         if (valid_rx[sample].rx_dq[dq] != expected) {
             if (failed_sample != NULL) {
                 *failed_sample = sample;
@@ -545,6 +682,11 @@ int t07_check_valid_rx_lfsr(const T07ValidRxEntry *valid_rx,
                             size_t *failed_sample,
                             size_t *failed_dq)
 {
+    /*
+     * KO_NOTE:
+     * 전체 64개 DQ를 순서대로 검사하다가 첫 mismatch 위치를 failed_sample/failed_dq로 알려줍니다.
+     * sweep에서는 DQ별 pass/fail이 필요하므로 더 자주 쓰는 것은 t07_check_dq_lfsr()입니다.
+     */
     size_t dq;
 
     if (valid_rx_count > 0U && valid_rx == NULL) {
@@ -585,6 +727,12 @@ int t07_get_pass(const T07PassData *pass_data,
                  u8 bit_dly,
                  u16 pe_dly)
 {
+    /*
+     * KO_NOTE:
+     * 저장된 pass zone들만 보고 특정 delay point가 pass인지 조회합니다.
+     * overflow로 저장되지 않은 zone은 여기서 보이지 않을 수 있습니다.
+     * center가 맞는 것과 이 조회 함수가 모든 zone을 아는 것은 별개의 문제입니다.
+     */
     size_t pc_index;
     size_t local_dq;
     size_t zone_index;
@@ -623,6 +771,11 @@ size_t t07_collect_pass_zones(const T07PassData *pass_data,
                               T07PassZone *zones,
                               size_t zone_capacity)
 {
+    /*
+     * KO_NOTE:
+     * 디버그 출력용으로 저장된 zone 목록을 복사합니다.
+     * 반환값은 실제 저장된 zone 개수이고, zones buffer가 작으면 앞쪽 일부만 복사됩니다.
+     */
     size_t pc_index;
     size_t local_dq;
     size_t stored_count;
@@ -652,6 +805,11 @@ int t07_run_read_training_sweep(u16 result_len,
                                 T07PassData *pass_data,
                                 T07PassCenter centers[T07_PC_COUNT][T07_DQ_PER_PC])
 {
+    /*
+     * KO_NOTE:
+     * T07 read training의 최상위 함수입니다.
+     * 이 함수 하나를 FW training code에 붙이면 전체 sweep, result read, LFSR 판정, center 산출이 이어집니다.
+     */
     size_t pc_index;
 
     if (result_len == 0U ||
@@ -680,6 +838,11 @@ int t07_run_read_training_sweep(u16 result_len,
      * T07_PE_DLY_COUNT.
      */
     for (pc_index = 0U; pc_index < T07_PC_COUNT; ++pc_index) {
+        /*
+         * KO_NOTE:
+         * PC0은 global dq0..31, PC1은 global dq32..63을 담당합니다.
+         * dq_begin/dq_end를 잡아두면 아래 loop는 두 PC를 같은 코드로 처리할 수 있습니다.
+         */
         T07Pc pc = pc_index == 0U ? T07_PC0 : T07_PC1;
         u8 dq_begin = pc == T07_PC0 ? 0U : T07_DQ_PER_PC;
         u8 dq_end = (u8)(dq_begin + T07_DQ_PER_PC);
@@ -689,6 +852,13 @@ int t07_run_read_training_sweep(u16 result_len,
             u8 bit_dly;
 
             for (bit_dly = 0U; bit_dly < T07_BIT_DLY_COUNT; ++bit_dly) {
+                /*
+                 * KO_NOTE:
+                 * active[local_dq]는 현재 pe_dly에서 pass run이 열려 있는지 표시합니다.
+                 * pe_start[local_dq]는 그 run이 시작된 pe_dly입니다.
+                 * 예: pe 3부터 pass가 시작되면 active=1, pe_start=3이 되고,
+                 *     나중에 fail을 만나면 pe_start..(pe_dly-1)을 zone으로 저장합니다.
+                 */
                 u8 active[T07_DQ_PER_PC];
                 u16 pe_start[T07_DQ_PER_PC];
                 u16 pe_dly;
@@ -701,6 +871,11 @@ int t07_run_read_training_sweep(u16 result_len,
                     size_t valid_rx_count = 0U;
                     int status;
 
+                    /*
+                     * KO_NOTE:
+                     * 현재 PC의 32개 DQ에 같은 mck/bit/pe delay point를 적용합니다.
+                     * 실제 register write는 g_t07_apply_delay 콜백 안에서 처리됩니다.
+                     */
                     for (dq = dq_begin; dq < dq_end; ++dq) {
                         status = g_t07_apply_delay(pc, dq, mck_dly, bit_dly, pe_dly);
                         if (status != T07_OK) {
@@ -718,6 +893,11 @@ int t07_run_read_training_sweep(u16 result_len,
                         return status;
                     }
 
+                    /*
+                     * KO_NOTE:
+                     * 한 delay point에서 result data는 한 번만 읽고,
+                     * 그 compact valid_rx를 32개 DQ 각각에 대해 독립적으로 LFSR 검사합니다.
+                     */
                     for (dq = dq_begin; dq < dq_end; ++dq) {
                         size_t local_dq = (size_t)(dq - dq_begin);
                         int passed = 0;
@@ -729,10 +909,20 @@ int t07_run_read_training_sweep(u16 result_len,
 
                         if (passed != 0) {
                             if (active[local_dq] == 0U) {
+                                /*
+                                 * KO_NOTE:
+                                 * fail 상태였다가 pass를 처음 만난 순간입니다.
+                                 * 여기서 pass zone 후보가 열립니다.
+                                 */
                                 active[local_dq] = 1U;
                                 pe_start[local_dq] = pe_dly;
                             }
                         } else if (active[local_dq] != 0U) {
+                            /*
+                             * KO_NOTE:
+                             * pass run이 열려 있었는데 이번 pe_dly에서 fail이 나왔습니다.
+                             * 따라서 직전 pe_dly까지가 pass zone입니다.
+                             */
                             status = t07_add_pass_zone(pass_data,
                                                        pc,
                                                        dq,
@@ -749,6 +939,11 @@ int t07_run_read_training_sweep(u16 result_len,
                 }
 
                 if (T07_PE_DLY_COUNT > 0U) {
+                    /*
+                     * KO_NOTE:
+                     * pe_dly loop가 끝날 때까지 계속 pass였던 run은 fail을 만나지 못했으므로
+                     * 여기서 마지막 pe_dly(T07_PE_DLY_COUNT-1)까지의 zone으로 닫아줍니다.
+                     */
                     for (dq = dq_begin; dq < dq_end; ++dq) {
                         size_t local_dq = (size_t)(dq - dq_begin);
 
@@ -772,6 +967,11 @@ int t07_run_read_training_sweep(u16 result_len,
     }
 
     if (centers != NULL) {
+        /*
+         * KO_NOTE:
+         * pass_data 안에는 항상 최신 best_center가 들어 있습니다.
+         * 호출자가 centers buffer를 주면 결과 확인을 편하게 하도록 복사해줍니다.
+         */
         memcpy(centers, pass_data->best_center, sizeof(pass_data->best_center));
     }
     return T07_OK;
