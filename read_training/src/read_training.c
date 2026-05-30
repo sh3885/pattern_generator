@@ -1,5 +1,6 @@
 #include "read_training.h"
 
+#include <stdio.h>
 #include <string.h>
 
 /*
@@ -118,6 +119,135 @@ const u8 expected_read_lfsr[READ_LFSR_LENGTH][READ_LFSR_DQ_GROUP_SIZE] = {
     {0x16U, 0x1DU, 0x24U, 0x2BU, 0x32U, 0x39U, 0x40U, 0x47U}
 };
 
+int dbg_rd_tr_decode_point(u32 point,
+                           u8 *mck_dly,
+                           u8 *bit_dly,
+                           u16 *pe_dly)
+{
+    const u32 points_per_mck = (u32)BIT_DLY_COUNT * (u32)PE_DLY_COUNT;
+    const u32 points_per_pc = (u32)MCK_DLY_COUNT * points_per_mck;
+    u32 rem;
+
+    if (mck_dly == NULL ||
+        bit_dly == NULL ||
+        pe_dly == NULL ||
+        point >= points_per_pc) {
+        return RD_TR_ERROR_INVALID_ARGUMENT;
+    }
+
+    *mck_dly = (u8)(point / points_per_mck);
+    rem = point % points_per_mck;
+    *bit_dly = (u8)(rem / (u32)PE_DLY_COUNT);
+    *pe_dly = (u16)(rem % (u32)PE_DLY_COUNT);
+
+    return RD_TR_OK;
+}
+
+int dbg_rd_tr_format_pass_zone(const RdTrPassZone *zone,
+                               char *out,
+                               size_t out_size)
+{
+    u8 start_mck;
+    u8 start_bit;
+    u16 start_pe;
+    u8 end_mck;
+    u8 end_bit;
+    u16 end_pe;
+    int written;
+    int status;
+
+    if (zone == NULL || out == NULL || out_size == 0U) {
+        return RD_TR_ERROR_INVALID_ARGUMENT;
+    }
+
+    status = dbg_rd_tr_decode_point(zone->point_start, &start_mck, &start_bit, &start_pe);
+    if (status != RD_TR_OK) {
+        return status;
+    }
+    status = dbg_rd_tr_decode_point(zone->point_end, &end_mck, &end_bit, &end_pe);
+    if (status != RD_TR_OK) {
+        return status;
+    }
+
+    written = snprintf(out,
+                       out_size,
+                       "pc%u dq%02u m%02u b%u pe%03u..m%02u b%u pe%03u len%u",
+                       (unsigned int)zone->pc,
+                       (unsigned int)zone->dq,
+                       (unsigned int)start_mck,
+                       (unsigned int)start_bit,
+                       (unsigned int)start_pe,
+                       (unsigned int)end_mck,
+                       (unsigned int)end_bit,
+                       (unsigned int)end_pe,
+                       (unsigned int)zone->point_count);
+
+    if (written < 0) {
+        return RD_TR_ERROR_INVALID_ARGUMENT;
+    }
+    if ((size_t)written >= out_size) {
+        return RD_TR_ERROR_BUFFER_TOO_SMALL;
+    }
+
+    return RD_TR_OK;
+}
+
+int dbg_rd_tr_format_pass_center(const RdTrPassCenter *center,
+                                 char *out,
+                                 size_t out_size)
+{
+    u8 start_mck;
+    u8 start_bit;
+    u16 start_pe;
+    u8 end_mck;
+    u8 end_bit;
+    u16 end_pe;
+    int written;
+    int status;
+
+    if (center == NULL || out == NULL || out_size == 0U) {
+        return RD_TR_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (center->valid == 0U) {
+        written = snprintf(out, out_size, "center=none");
+    } else {
+        status = dbg_rd_tr_decode_point(center->point_start, &start_mck, &start_bit, &start_pe);
+        if (status != RD_TR_OK) {
+            return status;
+        }
+        status = dbg_rd_tr_decode_point(center->point_end, &end_mck, &end_bit, &end_pe);
+        if (status != RD_TR_OK) {
+            return status;
+        }
+
+        written = snprintf(out,
+                           out_size,
+                           "pc%u dq%02u center=m%02u b%u pe%03u longest=m%02u b%u pe%03u..m%02u b%u pe%03u len%u",
+                           (unsigned int)center->pc,
+                           (unsigned int)center->dq,
+                           (unsigned int)center->mck_dly,
+                           (unsigned int)center->bit_dly,
+                           (unsigned int)center->pe_dly,
+                           (unsigned int)start_mck,
+                           (unsigned int)start_bit,
+                           (unsigned int)start_pe,
+                           (unsigned int)end_mck,
+                           (unsigned int)end_bit,
+                           (unsigned int)end_pe,
+                           (unsigned int)center->point_count);
+    }
+
+    if (written < 0) {
+        return RD_TR_ERROR_INVALID_ARGUMENT;
+    }
+    if ((size_t)written >= out_size) {
+        return RD_TR_ERROR_BUFFER_TOO_SMALL;
+    }
+
+    return RD_TR_OK;
+}
+
 void rd_tr_set_io(RdTrOut64Fn out64, RdTrIn64Fn in64)
 {
 #if defined(USE_NATIVE_XIL_IO)
@@ -163,7 +293,8 @@ void rd_tr_set_pass_zone_log(RdTrPassZoneLogFn log_fn, void *user_context)
 /*
  * Lowest-level result packet read. Keep this function name as t07_result_read
  * because existing training code calls it directly.
- */int t07_result_read(u8 mode,
+ */
+int t07_result_read(u8 mode,
                    u8 frame_num,
                    u16 bram_addr,
                    u8 *p_pkt_cnt,

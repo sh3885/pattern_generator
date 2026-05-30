@@ -162,6 +162,19 @@ typedef int (*RdTrApplyDelayFn)(u8 pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly
  */
 typedef void (*RdTrPassZoneLogFn)(const RdTrPassZone *zone, int stored, void *user_context);
 
+int dbg_rd_tr_decode_point(u32 point,
+                           u8 *mck_dly,
+                           u8 *bit_dly,
+                           u16 *pe_dly);
+
+int dbg_rd_tr_format_pass_zone(const RdTrPassZone *zone,
+                               char *out,
+                               size_t out_size);
+
+int dbg_rd_tr_format_pass_center(const RdTrPassCenter *center,
+                                 char *out,
+                                 size_t out_size);
+
 void rd_tr_set_io(RdTrOut64Fn out64, RdTrIn64Fn in64);
 void rd_tr_set_delay_apply(RdTrApplyDelayFn apply_delay);
 void rd_tr_set_pass_zone_log(RdTrPassZoneLogFn log_fn, void *user_context);

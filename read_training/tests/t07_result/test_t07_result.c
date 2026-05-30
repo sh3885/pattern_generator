@@ -788,6 +788,13 @@ static void run_sweep_test(FILE *log)
     static RdTrPassCenter centers[PC_COUNT][DQ_PER_PC];
     RdTrResultEntry parsed_entries[SAMPLE_RESULT_COUNT];
     RdTrValidRxEntry valid_rx[EXPECTED_VALID_RX_COUNT];
+    RdTrPassZone dbg_zones[2];
+    char dbg_line[160];
+    char dbg_small[8];
+    size_t dbg_zone_count;
+    u8 dbg_mck;
+    u8 dbg_bit;
+    u16 dbg_pe;
     int status;
 
     reset_mock_io();
@@ -842,6 +849,33 @@ static void run_sweep_test(FILE *log)
     assert(centers[1][0].point_start == TEST_DELAY_POINT(15U, 7U, 4U));
     assert(centers[1][0].point_end == TEST_DELAY_POINT(15U, 7U, 11U));
     assert(centers[1][0].point_count == 8U);
+
+    assert(dbg_rd_tr_decode_point(TEST_DELAY_POINT(14U, 7U, 35U),
+                                  &dbg_mck,
+                                  &dbg_bit,
+                                  &dbg_pe) == RD_TR_OK);
+    assert(dbg_mck == 14U);
+    assert(dbg_bit == 7U);
+    assert(dbg_pe == 35U);
+
+    assert(dbg_rd_tr_format_pass_center(&centers[0][0],
+                                        dbg_line,
+                                        sizeof(dbg_line)) == RD_TR_OK);
+    assert(strstr(dbg_line, "center=m14 b7 pe035") != NULL);
+    assert(dbg_rd_tr_format_pass_center(&centers[0][0],
+                                        dbg_small,
+                                        sizeof(dbg_small)) == RD_TR_ERROR_BUFFER_TOO_SMALL);
+
+    dbg_zone_count = rd_tr_collect_pass_zones(&pass_data,
+                                              RD_TR_PC1,
+                                              32U,
+                                              dbg_zones,
+                                              2U);
+    assert(dbg_zone_count > 0U);
+    assert(dbg_rd_tr_format_pass_zone(&dbg_zones[0],
+                                      dbg_line,
+                                      sizeof(dbg_line)) == RD_TR_OK);
+    assert(strstr(dbg_line, "pc1 dq32") != NULL);
 
     write_sweep_log(log, &pass_data, centers);
 }
