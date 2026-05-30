@@ -26,38 +26,20 @@ else()
     target_compile_options(read_training PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_executable(read_training_example
-    examples/main.c
-)
-
-target_link_libraries(read_training_example
-    PRIVATE read_training
-)
-
 enable_testing()
 
-add_executable(read_training_tests
-    tests/test_read_training.c
-)
-
-target_link_libraries(read_training_tests
-    PRIVATE read_training
-)
-
-add_test(NAME read_training_tests COMMAND read_training_tests)
-
-add_executable(t07_result_tests
+add_executable(rd_tr_result_tests
     tests/t07_result/test_t07_result.c
 )
 
-target_link_libraries(t07_result_tests
+target_link_libraries(rd_tr_result_tests
     PRIVATE read_training
 )
 
-target_compile_definitions(t07_result_tests
+target_compile_definitions(rd_tr_result_tests
     PRIVATE
         READ_TRAINING_EXPOSE_TEST_HELPERS
         RESULT_LOG_PATH="${CMAKE_CURRENT_BINARY_DIR}/t07_result_visual_log.txt"
 )
 
-add_test(NAME t07_result_tests COMMAND t07_result_tests)
+add_test(NAME rd_tr_result_tests COMMAND rd_tr_result_tests)

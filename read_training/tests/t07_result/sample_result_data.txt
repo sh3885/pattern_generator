@@ -1,7 +1,7 @@
 # T07 result parser sample data
 #
 # This file summarizes the current test sample.
-# Run t07_result_tests to generate the full raw/parsed table at:
+# Run rd_tr_result_tests to generate the full raw/parsed table at:
 #   read_training/build/t07_result_visual_log.txt
 #
 # Result byte order:

@@ -6,9 +6,6 @@ Small C project for core functions that can be reused from another codebase.
 
 - `include/read_training.h`: public API
 - `src/read_training.c`: implementation
-- `examples/main.c`: small usage example
-- `tests/test_read_training.c`: basic C assertions
-
 ## Build
 
 ```sh
@@ -22,4 +19,3 @@ ctest --test-dir build --output-on-failure
 Add public declarations to `include/read_training.h`, then implement them in
 `src/read_training.c`. Keep company-specific integration code outside this
 library boundary when possible.
-

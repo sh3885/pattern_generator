@@ -8,16 +8,6 @@
 extern "C" {
 #endif
 
-#define RT_VERSION_MAJOR 0
-#define RT_VERSION_MINOR 1
-#define RT_VERSION_PATCH 0
-
-typedef enum RtStatus {
-    RT_OK = 0,
-    RT_ERROR_INVALID_ARGUMENT = -1,
-    RT_ERROR_BUFFER_TOO_SMALL = -2
-} RtStatus;
-
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -70,22 +60,22 @@ typedef uint64_t u64;
 #error "PE_DLY_COUNT must fit in u16"
 #endif
 
-#define TRAINING_OK 0
-#define TRAINING_ERROR_INVALID_ARGUMENT (-1)
-#define TRAINING_ERROR_BUFFER_TOO_SMALL (-2)
-#define TRAINING_ERROR_IO_NOT_CONFIGURED (-3)
-#define TRAINING_ERROR_ACK (-4)
-#define TRAINING_ERROR_TABLE (-5)
-#define TRAINING_ERROR_SEGMENT (-6)
-#define TRAINING_ERROR_READ_ENABLE (-7)
-#define TRAINING_ERROR_PACKET_SEQUENCE (-8)
-#define TRAINING_ERROR_LFSR_MISMATCH (-9)
-#define TRAINING_ERROR_DELAY_APPLY (-10)
+#define RD_TR_OK 0
+#define RD_TR_ERROR_INVALID_ARGUMENT (-1)
+#define RD_TR_ERROR_BUFFER_TOO_SMALL (-2)
+#define RD_TR_ERROR_IO_NOT_CONFIGURED (-3)
+#define RD_TR_ERROR_ACK (-4)
+#define RD_TR_ERROR_TABLE (-5)
+#define RD_TR_ERROR_SEGMENT (-6)
+#define RD_TR_ERROR_READ_ENABLE (-7)
+#define RD_TR_ERROR_PACKET_SEQUENCE (-8)
+#define RD_TR_ERROR_LFSR_MISMATCH (-9)
+#define RD_TR_ERROR_DELAY_APPLY (-10)
 
-#define PC0 0U
-#define PC1 1U
+#define RD_TR_PC0 0U
+#define RD_TR_PC1 1U
 
-typedef struct T07ResultEntry {
+typedef struct RdTrResultEntry {
     /*
      * KO_NOTE:
      * HW에서 읽어온 T07 result table 한 줄을 C 구조체로 풀어놓은 형태입니다.
@@ -102,37 +92,32 @@ typedef struct T07ResultEntry {
     u8 read_tph_pc0;
     u8 read_tph_pc1;
     u8 rx_dq[RX_DQ_COUNT];
-} T07ResultEntry;
+} RdTrResultEntry;
 
-typedef struct T07ValidRxEntry {
+typedef struct RdTrValidRxEntry {
     /*
      * KO_NOTE:
      * read_en으로 표시된 valid bit들만 모아서 만든 "검사용 RX 샘플"입니다.
      * 8개의 valid bit가 모이면 rx_dq[0..63] 각각에 8-bit 값 하나가 생깁니다.
      */
     u8 rx_dq[RX_DQ_COUNT];
-} T07ValidRxEntry;
+} RdTrValidRxEntry;
 
-typedef struct T07PassZone {
+typedef struct RdTrPassZone {
     /*
-     * KO_NOTE:
-     * 한 DQ에서 특정 (mck_dly, bit_dly) 조합이 연속으로 pass한 pe_dly 구간입니다.
-     * 예: m00 b3 pe003..063 len61 은 mck=0, bit=3에서 pe 3부터 63까지 pass했다는 뜻입니다.
+     * One continuous pass run in the flattened sweep order.
+     * point = ((mck_dly * BIT_DLY_COUNT) + bit_dly) * PE_DLY_COUNT + pe_dly.
      */
     u8 pc;
     u8 dq;
-    u8 mck_dly;
-    u8 bit_dly;
-    u16 pe_start;
-    u16 pe_end;
-    u16 pe_count;
-} T07PassZone;
+    u32 point_start;
+    u32 point_end;
+    u32 point_count;
+} RdTrPassZone;
 
-typedef struct T07PassCenter {
+typedef struct RdTrPassCenter {
     /*
-     * KO_NOTE:
-     * 각 PC/DQ별 대표 center입니다. 현재 구현은 가장 긴 pass zone의 가운데 값을 고릅니다.
-     * valid=0이면 아직 해당 DQ에서 pass zone을 하나도 찾지 못했다는 뜻입니다.
+     * Center of the longest pass run for one PC/DQ, decoded back to mck/bit/pe.
      */
     u8 valid;
     u8 pc;
@@ -140,12 +125,12 @@ typedef struct T07PassCenter {
     u8 mck_dly;
     u8 bit_dly;
     u16 pe_dly;
-    u16 pe_start;
-    u16 pe_end;
-    u16 pe_count;
-} T07PassCenter;
+    u32 point_start;
+    u32 point_end;
+    u32 point_count;
+} RdTrPassCenter;
 
-typedef struct T07PassData {
+typedef struct RdTrPassData {
     /*
      * Only pass zones are stored. This keeps memory almost fixed even if
      * PE_DLY_COUNT grows from 64 to 1024.
@@ -162,85 +147,76 @@ typedef struct T07PassData {
      * pc1 local_dq 0..31 means global dq32..dq63.
      */
     u8 zone_count[PC_COUNT][DQ_PER_PC];
-    T07PassZone zones[PC_COUNT][DQ_PER_PC][MAX_PASS_ZONES_PER_DQ];
-    T07PassCenter best_center[PC_COUNT][DQ_PER_PC];
-} T07PassData;
+    RdTrPassZone zones[PC_COUNT][DQ_PER_PC][MAX_PASS_ZONES_PER_DQ];
+    RdTrPassCenter best_center[PC_COUNT][DQ_PER_PC];
+} RdTrPassData;
 
-typedef void (*T07Out64Fn)(uintptr_t addr, u64 value);
-typedef u64 (*T07In64Fn)(uintptr_t addr);
-typedef int (*T07ApplyDelayFn)(u8 pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly);
+typedef void (*RdTrOut64Fn)(uintptr_t addr, u64 value);
+typedef u64 (*RdTrIn64Fn)(uintptr_t addr);
+typedef int (*RdTrApplyDelayFn)(u8 pc, u8 dq, u8 mck_dly, u8 bit_dly, u16 pe_dly);
 /*
  * KO_NOTE:
  * pass zone이 발견될 때마다 호출되는 디버그용 콜백입니다.
- * stored=1이면 T07PassData.zones에 저장된 zone이고,
+ * stored=1이면 RdTrPassData.zones에 저장된 zone이고,
  * stored=0이면 MAX_PASS_ZONES_PER_DQ 제한 때문에 저장은 못 했지만 실제로 발견된 zone입니다.
  */
-typedef void (*T07PassZoneLogFn)(const T07PassZone *zone, int stored, void *user_context);
+typedef void (*RdTrPassZoneLogFn)(const RdTrPassZone *zone, int stored, void *user_context);
 
-const char *rt_status_message(RtStatus status);
+void rd_tr_set_io(RdTrOut64Fn out64, RdTrIn64Fn in64);
+void rd_tr_set_delay_apply(RdTrApplyDelayFn apply_delay);
+void rd_tr_set_pass_zone_log(RdTrPassZoneLogFn log_fn, void *user_context);
 
-/*
- * Copies line into out after removing leading and trailing ASCII whitespace.
- * If out is NULL, out_size is ignored and only the required byte count is
- * returned through written. The required count includes the trailing '\0'.
- */
-RtStatus rt_trim_line(const char *line, char *out, size_t out_size, size_t *written);
-
-void t07_set_io(T07Out64Fn out64, T07In64Fn in64);
-void t07_set_delay_apply(T07ApplyDelayFn apply_delay);
-void t07_set_pass_zone_log(T07PassZoneLogFn log_fn, void *user_context);
-
-int t07_run_read_training_sweep(u16 result_len,
-                                T07ResultEntry *entries,
-                                T07ValidRxEntry *valid_rx,
+int rd_tr_run_read_training_sweep(u16 result_len,
+                                RdTrResultEntry *entries,
+                                RdTrValidRxEntry *valid_rx,
                                 size_t valid_rx_capacity,
-                                T07PassData *pass_data,
-                                T07PassCenter centers[PC_COUNT][DQ_PER_PC]);
+                                RdTrPassData *pass_data,
+                                RdTrPassCenter centers[PC_COUNT][DQ_PER_PC]);
 
 #if defined(READ_TRAINING_EXPOSE_TEST_HELPERS)
 /*
  * KO_NOTE:
  * 아래 함수들은 PC unit test와 visual log 생성용 helper입니다.
- * FW 적용 시에는 보통 t07_run_read_training_sweep() 중심으로 쓰면 되고,
+ * FW 적용 시에는 보통 rd_tr_run_read_training_sweep() 중심으로 쓰면 되고,
  * 이 helper prototype들은 READ_TRAINING_EXPOSE_TEST_HELPERS를 켰을 때만 노출됩니다.
  */
 extern const u8 expected_read_lfsr[READ_LFSR_LENGTH][READ_LFSR_DQ_GROUP_SIZE];
 
-int t07_rsult_read(u8 mode,
+int t07_result_read(u8 mode,
                    u8 frame_num,
                    u16 bram_addr,
                    u8 *p_pkt_cnt,
                    u8 *p_seg_cnt,
                    u32 *p_data);
 
-int t07_read_training_results(u16 result_len,
+int rd_tr_read_training_results(u16 result_len,
                               u8 pc,
-                              T07ResultEntry *entries,
-                              T07ValidRxEntry *valid_rx,
+                              RdTrResultEntry *entries,
+                              RdTrValidRxEntry *valid_rx,
                               size_t valid_rx_capacity,
                               size_t *valid_rx_count);
 
-int t07_check_valid_rx_lfsr(const T07ValidRxEntry *valid_rx,
+int rd_tr_check_valid_rx_lfsr(const RdTrValidRxEntry *valid_rx,
                             size_t valid_rx_count,
                             size_t *failed_sample,
                             size_t *failed_dq);
 
-int t07_check_dq_lfsr(const T07ValidRxEntry *valid_rx,
+int rd_tr_check_dq_lfsr(const RdTrValidRxEntry *valid_rx,
                       size_t valid_rx_count,
                       u8 dq,
                       size_t *failed_sample);
 
-int t07_get_pass(const T07PassData *pass_data,
+int rd_tr_get_pass(const RdTrPassData *pass_data,
                  u8 pc,
                  u8 dq,
                  u8 mck_dly,
                  u8 bit_dly,
                  u16 pe_dly);
 
-size_t t07_collect_pass_zones(const T07PassData *pass_data,
+size_t rd_tr_collect_pass_zones(const RdTrPassData *pass_data,
                               u8 pc,
                               u8 dq,
-                              T07PassZone *zones,
+                              RdTrPassZone *zones,
                               size_t zone_capacity);
 #endif
 
